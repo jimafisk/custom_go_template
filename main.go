@@ -22,36 +22,28 @@ type Component struct {
 func Render(content string, data map[string]any) string {
 
 	// Get list of imported components
-	components := getComponents(content)
+	content, components, script := processFence(content)
 
-	// Remove fences
-	reFences := regexp.MustCompile(`(?s)---(.*?)---`)
-	//fences := reFences.FindStringSubmatch(content)
-	//fmt.Println(fences[1])
-
-	content = reFences.ReplaceAllString(content, "")
-
-	fmt.Println(data)
 	// Replace placeholders with data
 	for name, value := range data {
+		reProp := regexp.MustCompile(fmt.Sprintf(`let (%s);`, name))
 		reTextNodesOnly := regexp.MustCompile(fmt.Sprintf(`(>.*?)({%s})(.*?<)`, name)) // TODO: Only temp replacing textnodes to avoid conflicts with props
 		switch value := value.(type) {
 		case string:
-			fmt.Println(value)
-			//content = strings.ReplaceAll(content, "{"+name+"}", value)
+			script = reProp.ReplaceAllString(script, "let "+name+"='"+value+"';")
 			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+value+`${3}`)
 		case int:
-			fmt.Println(value)
-			//content = strings.ReplaceAll(content, "{"+name+"}", strconv.Itoa(value))
+			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(value)+";")
 			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(value)+`${3}`)
 		default:
-			fmt.Println(reflect.TypeOf(value))
 			// handle other values
+			fmt.Println(reflect.TypeOf(value))
 		}
 	}
+	fmt.Println(script)
 
 	vm := goja.New()
-	vm.RunString(`let name = "rex"; let age=33;`)
+	vm.RunString(script)
 	// Recursively render imports
 	for _, component := range components {
 		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
@@ -75,30 +67,35 @@ func Render(content string, data map[string]any) string {
 	return content
 }
 
-func getComponents(content string) []Component {
+func processFence(content string) (string, []Component, string) {
 	components := []Component{}
-	re := regexp.MustCompile(`(?s)---(.*?)---`)
-	matches := re.FindAllStringSubmatch(content, -1)
-	for _, match := range matches {
-		for _, line := range strings.Split(match[1], "\n") {
-			re := regexp.MustCompile(`import\s+([A-Za-z_][A-Za-z_0-9]*)\s+from\s*"([^"]+)`)
-			match := re.FindStringSubmatch(line)
+	reFence := regexp.MustCompile(`(?s)---(.*?)---`)
+	fence := reFence.FindStringSubmatch(content)
+	script := ""
+	if len(fence) > 1 {
+		fenceContents := fence[1]
+		script = fenceContents
+		for _, line := range strings.Split(fenceContents, "\n") {
+			reImport := regexp.MustCompile(`import\s+([A-Za-z_][A-Za-z_0-9]*)\s+from\s*"([^"]+)";`)
+			match := reImport.FindStringSubmatch(line)
 			if len(match) > 1 {
-				name := match[1]
-				path := match[2]
-				content, err := os.ReadFile(path)
+				compName := match[1]
+				compPath := match[2]
+				compContent, err := os.ReadFile(compPath)
 				if err != nil {
 					log.Fatal(err)
 				}
 				components = append(components, Component{
-					Name:    name,
-					Path:    path,
-					Content: string(content),
+					Name:    compName,
+					Path:    compPath,
+					Content: string(compContent),
 				})
+				script = reImport.ReplaceAllString(script, "") // Remove current import so script can run in goja
 			}
 		}
+		content = reFence.ReplaceAllString(content, "") // Remove fence entirely
 	}
-	return components
+	return content, components, script
 }
 
 func main() {
