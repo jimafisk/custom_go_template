@@ -32,6 +32,7 @@ func Render(name, path string, data map[string]any) string {
 	script = setProps(script, data)
 	data = evaluateProps(script, data)
 	content = applyProps(content, data)
+	content = evaluateConditions(content, data)
 
 	// Recursively render imports
 	for _, component := range components {
@@ -101,6 +102,31 @@ func applyProps(content string, data map[string]any) string {
 		}
 	}
 	return content
+}
+
+func evaluateConditions(content string, data map[string]any) string {
+	reCondition := regexp.MustCompile(`(?s){if\s(.*?)}(.*?)({else}?)(.*?)({/if})`)
+	match := reCondition.FindStringSubmatch(content)
+	if len(match) > 0 {
+		condition := match[1]
+		trueContent := match[2]
+		falseContent := ""
+		if match[3] == "{else}" {
+			falseContent = match[4]
+		}
+		if evalJS(condition, data) {
+			content = reCondition.ReplaceAllString(content, trueContent)
+		} else {
+			content = reCondition.ReplaceAllString(content, falseContent)
+		}
+	}
+	return content
+}
+
+func evalJS(condition string, data map[string]any) bool {
+	vm := goja.New()
+	result, _ := vm.RunString(condition)
+	return result.ToBoolean()
 }
 
 func processFence(content string) (string, []Component, string) {
