@@ -25,25 +25,34 @@ func Render(content string, data map[string]any) string {
 	re := regexp.MustCompile(`(?s)---(.*?)---`)
 	content = re.ReplaceAllString(content, "")
 
-	// Replace placeholders with data
-	for key, value := range data {
-		switch value := value.(type) {
-		case string:
-			content = strings.ReplaceAll(content, "{"+key+"}", value)
-		case int:
-			content = strings.ReplaceAll(content, "{"+key+"}", strconv.Itoa(value))
-		default:
-			// handle other values
+	// Recursively render imports
+	for _, component := range components {
+		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
+		matches := reComponent.FindAllStringSubmatch(content, -1)
+		for _, match := range matches {
+			if len(match) > 1 {
+				passed_data := map[string]any{}
+				reProp := regexp.MustCompile(`{(.*?)}`)
+				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
+				for _, wrapped_prop := range wrapped_props {
+					prop_name := wrapped_prop[1]
+					passed_data[prop_name] = data[prop_name] // TODO: Actually need to evaluate value
+				}
+				renderedComp := Render(component.Content, passed_data)
+				content = reComponent.ReplaceAllString(content, renderedComp)
+			}
 		}
 	}
 
-	// Recursively render imports
-	for _, component := range components {
-		re := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
-		match := re.FindStringSubmatch(content)
-		if len(match) > 1 {
-			renderedComp := Render(component.Content, data)
-			content = re.ReplaceAllString(content, renderedComp)
+	// Replace placeholders with data
+	for name, value := range data {
+		switch value := value.(type) {
+		case string:
+			content = strings.ReplaceAll(content, "{"+name+"}", value)
+		case int:
+			content = strings.ReplaceAll(content, "{"+name+"}", strconv.Itoa(value))
+		default:
+			// handle other values
 		}
 	}
 
