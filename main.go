@@ -13,40 +13,26 @@ import (
 )
 
 type Component struct {
-	Name    string
-	Path    string
-	Content string
+	Name string
+	Path string
 }
 
 // Render renders the template with the given data
-func Render(content string, data map[string]any) string {
+func Render(name, path string, data map[string]any) string {
+
+	c, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	content := string(c)
 
 	// Get list of imported components
 	content, components, script := processFence(content)
 
-	// Replace placeholders with data
-	for name, value := range data {
-		reProp := regexp.MustCompile(fmt.Sprintf(`let (%s);`, name))
-		reTextNodesOnly := regexp.MustCompile(fmt.Sprintf(`(>.*?)({%s})(.*?<)`, name)) // TODO: Only temp replacing textnodes to avoid conflicts with props
-		switch value := value.(type) {
-		case string:
-			script = reProp.ReplaceAllString(script, "let "+name+"='"+value+"';")
-			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+value+`${3}`)
-		case int:
-			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(value)+";")
-			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(value)+`${3}`)
-		case int64:
-			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(int(value))+";")
-			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(int(value))+`${3}`)
-		default:
-			// handle other values
-			fmt.Println(reflect.TypeOf(value))
-		}
-	}
-	fmt.Println(script)
+	script = setProps(script, data)
+	data = evaluateProps(script, data)
+	content = applyProps(content, data)
 
-	vm := goja.New()
-	vm.RunString(script)
 	// Recursively render imports
 	for _, component := range components {
 		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
@@ -58,15 +44,62 @@ func Render(content string, data map[string]any) string {
 				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
 				for _, wrapped_prop := range wrapped_props {
 					prop_name := wrapped_prop[1]
-					prop_value := vm.Get(prop_name).Export()
+					prop_value := data[prop_name]
 					passed_data[prop_name] = prop_value
 				}
-				renderedComp := Render(component.Content, passed_data)
+				renderedComp := Render(component.Name, component.Path, passed_data)
 				content = reComponent.ReplaceAllString(content, renderedComp)
 			}
 		}
 	}
 
+	return content
+}
+
+func setProps(script string, data map[string]any) string {
+	for name, value := range data {
+		reProp := regexp.MustCompile(fmt.Sprintf(`let (%s);`, name))
+		switch value := value.(type) {
+		case string:
+			script = reProp.ReplaceAllString(script, "let "+name+"='"+value+"';")
+		case int:
+			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(value)+";")
+		case int64:
+			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(int(value))+";")
+		default:
+			// handle other values
+			fmt.Println(reflect.TypeOf(value))
+		}
+	}
+	return script
+}
+
+func evaluateProps(script string, data map[string]any) map[string]any {
+	vm := goja.New()
+	vm.RunString(script)
+	for name := range data {
+		evaluated_value := vm.Get(name).Export()
+		data[name] = evaluated_value
+	}
+	return data
+}
+
+func applyProps(content string, data map[string]any) string {
+	// Replace placeholders with data
+	for name, value := range data {
+		reTextNodesOnly := regexp.MustCompile(fmt.Sprintf(`(>.*?)({%s})(.*?<)`, name)) // TODO: Only temp replacing textnodes to avoid conflicts with props
+		switch value := value.(type) {
+		case string:
+			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+value+`${3}`)
+		case int:
+			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(value)+`${3}`)
+		case int64:
+			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(int(value))+`${3}`)
+		default:
+			// handle other values
+			fmt.Println(reflect.TypeOf(value))
+		}
+	}
 	return content
 }
 
@@ -84,14 +117,9 @@ func processFence(content string) (string, []Component, string) {
 			if len(match) > 1 {
 				compName := match[1]
 				compPath := match[2]
-				compContent, err := os.ReadFile(compPath)
-				if err != nil {
-					log.Fatal(err)
-				}
 				components = append(components, Component{
-					Name:    compName,
-					Path:    compPath,
-					Content: string(compContent),
+					Name: compName,
+					Path: compPath,
 				})
 				script = reImport.ReplaceAllString(script, "") // Remove current import so script can run in goja
 			}
@@ -115,11 +143,9 @@ func SwitchType(value any, callback func(any)) {
 }
 
 func main() {
-	// Define a template
-	templateSrc, _ := os.ReadFile("views/home.html")
 	// Render the template with data
 	data := map[string]any{"name": "John", "age": 25}
-	rendered := Render(string(templateSrc), data)
+	rendered := Render("Home", "views/home.html", data)
 
 	fmt.Println(rendered)
 }
