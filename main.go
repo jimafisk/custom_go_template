@@ -35,6 +35,9 @@ func Render(content string, data map[string]any) string {
 		case int:
 			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(value)+";")
 			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(value)+`${3}`)
+		case int64:
+			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(int(value))+";")
+			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(int(value))+`${3}`)
 		default:
 			// handle other values
 			fmt.Println(reflect.TypeOf(value))
@@ -55,7 +58,7 @@ func Render(content string, data map[string]any) string {
 				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
 				for _, wrapped_prop := range wrapped_props {
 					prop_name := wrapped_prop[1]
-					prop_value := vm.Get(prop_name).String()
+					prop_value := vm.Get(prop_name).Export()
 					passed_data[prop_name] = prop_value
 				}
 				renderedComp := Render(component.Content, passed_data)
@@ -96,6 +99,19 @@ func processFence(content string) (string, []Component, string) {
 		content = reFence.ReplaceAllString(content, "") // Remove fence entirely
 	}
 	return content, components, script
+}
+
+func SwitchType(value any, callback func(any)) {
+	switch value := value.(type) {
+	case string:
+		callback(value)
+	case int:
+		callback(value)
+	case bool:
+		callback(value)
+	default:
+		// handle unknown types
+	}
 }
 
 func main() {
