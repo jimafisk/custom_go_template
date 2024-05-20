@@ -4,9 +4,12 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/dop251/goja"
 )
 
 type Component struct {
@@ -22,9 +25,33 @@ func Render(content string, data map[string]any) string {
 	components := getComponents(content)
 
 	// Remove fences
-	re := regexp.MustCompile(`(?s)---(.*?)---`)
-	content = re.ReplaceAllString(content, "")
+	reFences := regexp.MustCompile(`(?s)---(.*?)---`)
+	//fences := reFences.FindStringSubmatch(content)
+	//fmt.Println(fences[1])
 
+	content = reFences.ReplaceAllString(content, "")
+
+	fmt.Println(data)
+	// Replace placeholders with data
+	for name, value := range data {
+		reTextNodesOnly := regexp.MustCompile(fmt.Sprintf(`(>.*?)({%s})(.*?<)`, name)) // TODO: Only temp replacing textnodes to avoid conflicts with props
+		switch value := value.(type) {
+		case string:
+			fmt.Println(value)
+			//content = strings.ReplaceAll(content, "{"+name+"}", value)
+			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+value+`${3}`)
+		case int:
+			fmt.Println(value)
+			//content = strings.ReplaceAll(content, "{"+name+"}", strconv.Itoa(value))
+			content = reTextNodesOnly.ReplaceAllString(content, `${1}`+strconv.Itoa(value)+`${3}`)
+		default:
+			fmt.Println(reflect.TypeOf(value))
+			// handle other values
+		}
+	}
+
+	vm := goja.New()
+	vm.RunString(`let name = "rex"; let age=33;`)
 	// Recursively render imports
 	for _, component := range components {
 		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
@@ -36,23 +63,12 @@ func Render(content string, data map[string]any) string {
 				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
 				for _, wrapped_prop := range wrapped_props {
 					prop_name := wrapped_prop[1]
-					passed_data[prop_name] = data[prop_name] // TODO: Actually need to evaluate value
+					prop_value := vm.Get(prop_name).String()
+					passed_data[prop_name] = prop_value
 				}
 				renderedComp := Render(component.Content, passed_data)
 				content = reComponent.ReplaceAllString(content, renderedComp)
 			}
-		}
-	}
-
-	// Replace placeholders with data
-	for name, value := range data {
-		switch value := value.(type) {
-		case string:
-			content = strings.ReplaceAll(content, "{"+name+"}", value)
-		case int:
-			content = strings.ReplaceAll(content, "{"+name+"}", strconv.Itoa(value))
-		default:
-			// handle other values
 		}
 	}
 
