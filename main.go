@@ -21,7 +21,7 @@ type Component struct {
 }
 
 // Render renders the template with the given data
-func Render(name, path string, props map[string]any) string {
+func Render(path string, props map[string]any) (string, string, string) {
 
 	c, err := os.ReadFile(path)
 	if err != nil {
@@ -29,38 +29,22 @@ func Render(name, path string, props map[string]any) string {
 	}
 	template := string(c)
 
-	dom, fence, script, style := templateParts(template)
-	fmt.Println(script)
-	fmt.Println(style)
+	// Split template into parts
+	markup, fence, script, style := templateParts(template)
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(fence)
-
+	// Set the prop to the value that's passed in
 	fence = setProps(fence, props)
+	// Run the JS in Goja to get the computed values for props
 	props = evaluateProps(fence, props)
-	dom = applyProps(dom, props)
-	dom = renderConditions(dom, props)
+	// Replace any simple vars in the format {myProp} with the value
+	markup = applyProps(markup, props)
+	// Run template conditions {if}{else}{/if}
+	markup = renderConditions(markup, props)
+	// Recursively render imported components
+	markup, script, style = renderComponents(markup, script, style, props, components)
 
-	// Recursively render imports
-	for _, component := range components {
-		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
-		matches := reComponent.FindAllStringSubmatch(dom, -1)
-		for _, match := range matches {
-			if len(match) > 1 {
-				comp_props := map[string]any{}
-				reProp := regexp.MustCompile(`{(.*?)}`)
-				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
-				for _, wrapped_prop := range wrapped_props {
-					prop_name := wrapped_prop[1]
-					prop_value := props[prop_name]
-					comp_props[prop_name] = prop_value
-				}
-				renderedComp := Render(component.Name, component.Path, comp_props)
-				dom = reComponent.ReplaceAllString(dom, renderedComp)
-			}
-		}
-	}
-
-	return dom
+	return markup, script, style
 }
 
 func templateParts(template string) (string, string, string, string) {
@@ -210,6 +194,31 @@ func getComponents(fence string) (string, []Component) {
 	return fence, components
 }
 
+func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
+	// Recursively render imports
+	for _, component := range components {
+		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
+		matches := reComponent.FindAllStringSubmatch(markup, -1)
+		for _, match := range matches {
+			if len(match) > 1 {
+				comp_props := map[string]any{}
+				reProp := regexp.MustCompile(`{(.*?)}`)
+				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
+				for _, wrapped_prop := range wrapped_props {
+					prop_name := wrapped_prop[1]
+					prop_value := props[prop_name]
+					comp_props[prop_name] = prop_value
+				}
+				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
+				markup = reComponent.ReplaceAllString(markup, comp_markup)
+				script = script + comp_script
+				style = style + comp_style
+			}
+		}
+	}
+	return markup, script, style
+}
+
 func anyToString(value any) string {
 	switch value := value.(type) {
 	case string:
@@ -227,6 +236,8 @@ func anyToString(value any) string {
 func main() {
 	// Render the template with data
 	props := map[string]any{"name": "John", "age": 25}
-	rendered := Render("Home", "views/home.html", props)
-	fmt.Println(rendered)
+	markup, script, style := Render("views/home.html", props)
+	fmt.Println(markup)
+	fmt.Println(script)
+	fmt.Println(style)
 }
