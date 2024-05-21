@@ -27,20 +27,23 @@ func Render(name, path string, props map[string]any) string {
 	if err != nil {
 		log.Fatal(err)
 	}
-	content := string(c)
+	template := string(c)
 
-	// Get list of imported components
-	content, components, script := processFence(content)
+	dom, fence, script, style := templateParts(template)
+	fmt.Println(script)
+	fmt.Println(style)
+	// Get list of imported components and remove imports from fence
+	fence, components := getComponents(fence)
 
-	script = setProps(script, props)
-	props = evaluateProps(script, props)
-	content = applyProps(content, props)
-	content = renderConditions(content, props)
+	fence = setProps(fence, props)
+	props = evaluateProps(fence, props)
+	dom = applyProps(dom, props)
+	dom = renderConditions(dom, props)
 
 	// Recursively render imports
 	for _, component := range components {
 		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
-		matches := reComponent.FindAllStringSubmatch(content, -1)
+		matches := reComponent.FindAllStringSubmatch(dom, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
 				comp_props := map[string]any{}
@@ -52,12 +55,50 @@ func Render(name, path string, props map[string]any) string {
 					comp_props[prop_name] = prop_value
 				}
 				renderedComp := Render(component.Name, component.Path, comp_props)
-				content = reComponent.ReplaceAllString(content, renderedComp)
+				dom = reComponent.ReplaceAllString(dom, renderedComp)
 			}
 		}
 	}
 
-	return content
+	return dom
+}
+
+func templateParts(template string) (string, string, string, string) {
+	reFence := regexp.MustCompile(`(?s)---(.*?)---`)
+	reScript := regexp.MustCompile(`(?s)<script>(.*?)</script>`)
+	reStyle := regexp.MustCompile(`(?s)<style>(.*?)</style>`)
+	fences := reFence.FindAllStringSubmatch(template, -1)
+	scripts := reScript.FindAllStringSubmatch(template, -1)
+	styles := reStyle.FindAllStringSubmatch(template, -1)
+	if len(fences) > 1 {
+		log.Fatal("Can only have one set of Fences (--- and ---) per template")
+	}
+	if len(scripts) > 1 {
+		log.Fatal("Can only have one set of Script tags (<script></script>) per template")
+	}
+	if len(styles) > 1 {
+		log.Fatal("Can only have one set of Style tags (<style></style>) per template")
+	}
+	dom := template
+	fence := ""
+	script := ""
+	style := ""
+	if len(fences) > 0 {
+		wrapped_fence := fences[0][0]
+		fence = fences[0][1]
+		dom = strings.Replace(template, wrapped_fence, "", 1)
+	}
+	if len(scripts) > 0 {
+		wrapped_script := scripts[0][0]
+		script = scripts[0][1]
+		dom = strings.Replace(template, wrapped_script, "", 1)
+	}
+	if len(styles) > 0 {
+		wrapped_style := styles[0][0]
+		style = styles[0][1]
+		dom = strings.Replace(template, wrapped_style, "", 1)
+	}
+	return dom, fence, script, style
 }
 
 func setProps(script string, props map[string]any) string {
@@ -151,30 +192,22 @@ func evaluateCondition(condition string, props map[string]any) bool {
 	}
 }
 
-func processFence(content string) (string, []Component, string) {
+func getComponents(fence string) (string, []Component) {
 	components := []Component{}
-	reFence := regexp.MustCompile(`(?s)---(.*?)---`)
-	fence := reFence.FindStringSubmatch(content)
-	script := ""
-	if len(fence) > 1 {
-		fenceContents := fence[1]
-		script = fenceContents
-		for _, line := range strings.Split(fenceContents, "\n") {
-			reImport := regexp.MustCompile(`import\s+([A-Za-z_][A-Za-z_0-9]*)\s+from\s*"([^"]+)";`)
-			match := reImport.FindStringSubmatch(line)
-			if len(match) > 1 {
-				compName := match[1]
-				compPath := match[2]
-				components = append(components, Component{
-					Name: compName,
-					Path: compPath,
-				})
-				script = reImport.ReplaceAllString(script, "") // Remove current import so script can run in goja
-			}
+	reImport := regexp.MustCompile(`import\s+([A-Za-z_][A-Za-z_0-9]*)\s+from\s*"([^"]+)";`)
+	for _, line := range strings.Split(fence, "\n") {
+		match := reImport.FindStringSubmatch(line)
+		if len(match) > 1 {
+			compName := match[1]
+			compPath := match[2]
+			components = append(components, Component{
+				Name: compName,
+				Path: compPath,
+			})
+			fence = reImport.ReplaceAllString(fence, "") // Remove current import so script can run in goja
 		}
-		content = reFence.ReplaceAllString(content, "") // Remove fence entirely
 	}
-	return content, components, script
+	return fence, components
 }
 
 func anyToString(value any) string {
