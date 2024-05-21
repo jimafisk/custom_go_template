@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"reflect"
@@ -10,6 +11,8 @@ import (
 	"strings"
 
 	"github.com/dop251/goja"
+	"github.com/tdewolff/parse/v2"
+	"github.com/tdewolff/parse/v2/js"
 )
 
 type Component struct {
@@ -123,10 +126,33 @@ func evaluateConditions(content string, data map[string]any) string {
 	return content
 }
 
-func evalJS(condition string, data map[string]any) bool {
+func evalJS(javascript string, data map[string]any) bool {
+	fmt.Println(javascript)
 	vm := goja.New()
-	result, _ := vm.RunString(condition)
-	return result.ToBoolean()
+	l := js.NewLexer(parse.NewInputString(javascript))
+	for {
+		tt, text := l.Next()
+		switch tt {
+		case js.ErrorToken:
+			if l.Err() != io.EOF {
+				fmt.Println("Error: ", l.Err())
+			}
+			result, _ := vm.RunString(javascript)
+			return result.ToBoolean()
+		case js.IdentifierToken:
+			value, ok := data[string(text)]
+			if ok {
+				javascript = strings.Replace(javascript, string(text), anyToString(value), 1)
+			}
+			fmt.Println("Identifier", string(text))
+		case js.NumericToken:
+			fmt.Println("Numeric", string(text))
+		case js.IntegerToken:
+			fmt.Println("Integer", string(text))
+		default:
+			fmt.Println("default..")
+		}
+	}
 }
 
 func processFence(content string) (string, []Component, string) {
@@ -155,16 +181,17 @@ func processFence(content string) (string, []Component, string) {
 	return content, components, script
 }
 
-func SwitchType(value any, callback func(any)) {
+func anyToString(value any) string {
 	switch value := value.(type) {
 	case string:
-		callback(value)
+		return value
 	case int:
-		callback(value)
-	case bool:
-		callback(value)
+		return strconv.Itoa(value)
+	case int64:
+		return strconv.Itoa(int(value))
 	default:
-		// handle unknown types
+		fmt.Println(reflect.TypeOf(value))
+		return ""
 	}
 }
 
