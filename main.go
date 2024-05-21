@@ -21,7 +21,7 @@ type Component struct {
 }
 
 // Render renders the template with the given data
-func Render(name, path string, data map[string]any) string {
+func Render(name, path string, props map[string]any) string {
 
 	c, err := os.ReadFile(path)
 	if err != nil {
@@ -32,10 +32,10 @@ func Render(name, path string, data map[string]any) string {
 	// Get list of imported components
 	content, components, script := processFence(content)
 
-	script = setProps(script, data)
-	data = evaluateProps(script, data)
-	content = applyProps(content, data)
-	content = evaluateConditions(content, data)
+	script = setProps(script, props)
+	props = evaluateProps(script, props)
+	content = applyProps(content, props)
+	content = renderConditions(content, props)
 
 	// Recursively render imports
 	for _, component := range components {
@@ -43,15 +43,15 @@ func Render(name, path string, data map[string]any) string {
 		matches := reComponent.FindAllStringSubmatch(content, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
-				passed_data := map[string]any{}
+				comp_props := map[string]any{}
 				reProp := regexp.MustCompile(`{(.*?)}`)
 				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
 				for _, wrapped_prop := range wrapped_props {
 					prop_name := wrapped_prop[1]
-					prop_value := data[prop_name]
-					passed_data[prop_name] = prop_value
+					prop_value := props[prop_name]
+					comp_props[prop_name] = prop_value
 				}
-				renderedComp := Render(component.Name, component.Path, passed_data)
+				renderedComp := Render(component.Name, component.Path, comp_props)
 				content = reComponent.ReplaceAllString(content, renderedComp)
 			}
 		}
@@ -60,8 +60,8 @@ func Render(name, path string, data map[string]any) string {
 	return content
 }
 
-func setProps(script string, data map[string]any) string {
-	for name, value := range data {
+func setProps(script string, props map[string]any) string {
+	for name, value := range props {
 		reProp := regexp.MustCompile(fmt.Sprintf(`let (%s);`, name))
 		switch value := value.(type) {
 		case string:
@@ -78,19 +78,19 @@ func setProps(script string, data map[string]any) string {
 	return script
 }
 
-func evaluateProps(script string, data map[string]any) map[string]any {
+func evaluateProps(script string, props map[string]any) map[string]any {
 	vm := goja.New()
 	vm.RunString(script)
-	for name := range data {
+	for name := range props {
 		evaluated_value := vm.Get(name).Export()
-		data[name] = evaluated_value
+		props[name] = evaluated_value
 	}
-	return data
+	return props
 }
 
-func applyProps(content string, data map[string]any) string {
+func applyProps(content string, props map[string]any) string {
 	// Replace placeholders with data
-	for name, value := range data {
+	for name, value := range props {
 		reTextNodesOnly := regexp.MustCompile(fmt.Sprintf(`(>.*?)({%s})(.*?<)`, name)) // TODO: Only temp replacing textnodes to avoid conflicts with props
 		switch value := value.(type) {
 		case string:
@@ -107,29 +107,30 @@ func applyProps(content string, data map[string]any) string {
 	return content
 }
 
-func evaluateConditions(content string, data map[string]any) string {
+func renderConditions(content string, props map[string]any) string {
 	reCondition := regexp.MustCompile(`(?s){if\s(.*?)}(.*?)({else}?)(.*?)({/if})`)
-	match := reCondition.FindStringSubmatch(content)
-	if len(match) > 0 {
-		condition := match[1]
-		trueContent := match[2]
-		falseContent := ""
-		if match[3] == "{else}" {
-			falseContent = match[4]
-		}
-		if evalJS(condition, data) {
-			content = reCondition.ReplaceAllString(content, trueContent)
-		} else {
-			content = reCondition.ReplaceAllString(content, falseContent)
+	matches := reCondition.FindAllStringSubmatch(content, -1)
+	for _, match := range matches {
+		if len(match) > 0 {
+			condition := match[1]
+			trueContent := match[2]
+			falseContent := ""
+			if match[3] == "{else}" {
+				falseContent = match[4]
+			}
+			if evaluateCondition(condition, props) {
+				content = reCondition.ReplaceAllString(content, trueContent)
+			} else {
+				content = reCondition.ReplaceAllString(content, falseContent)
+			}
 		}
 	}
 	return content
 }
 
-func evalJS(javascript string, data map[string]any) bool {
-	fmt.Println(javascript)
+func evaluateCondition(condition string, props map[string]any) bool {
 	vm := goja.New()
-	l := js.NewLexer(parse.NewInputString(javascript))
+	l := js.NewLexer(parse.NewInputString(condition))
 	for {
 		tt, text := l.Next()
 		switch tt {
@@ -137,20 +138,15 @@ func evalJS(javascript string, data map[string]any) bool {
 			if l.Err() != io.EOF {
 				fmt.Println("Error: ", l.Err())
 			}
-			result, _ := vm.RunString(javascript)
+			result, _ := vm.RunString(condition)
 			return result.ToBoolean()
 		case js.IdentifierToken:
-			value, ok := data[string(text)]
+			value, ok := props[string(text)]
 			if ok {
-				javascript = strings.Replace(javascript, string(text), anyToString(value), 1)
+				condition = strings.Replace(condition, string(text), anyToString(value), 1)
 			}
-			fmt.Println("Identifier", string(text))
-		case js.NumericToken:
-			fmt.Println("Numeric", string(text))
-		case js.IntegerToken:
-			fmt.Println("Integer", string(text))
 		default:
-			fmt.Println("default..")
+			//fmt.Println("Token Type is: " + js.TokenType(tt).String())
 		}
 	}
 }
@@ -197,8 +193,7 @@ func anyToString(value any) string {
 
 func main() {
 	// Render the template with data
-	data := map[string]any{"name": "John", "age": 25}
-	rendered := Render("Home", "views/home.html", data)
-
+	props := map[string]any{"name": "John", "age": 25}
+	rendered := Render("Home", "views/home.html", props)
 	fmt.Println(rendered)
 }
