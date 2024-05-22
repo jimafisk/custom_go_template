@@ -12,6 +12,11 @@ let age;
 	</head>
 	<body>
 		<h1>Hi {name}</h1>
+		{if name === "John"}
+			<div>John is great</div>
+		{else}
+			<div>Not sure who you are, but you're probably great</div>
+		{/if}
 		<Age {name} {age} />
 	</body>
 </html>

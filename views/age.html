@@ -8,9 +8,11 @@ let age;
 <div>{name}'s age is: {age}</div>
 
 {if age > 40}
-	<div>You're over the hill</div>
+	<div>Over the hill</div>
+{else if age > 21}
+	<div>Can drink</div>
 {else}
-	<div>You're just a baby</div>
+	<div>Just a baby</div>
 {/if}
 
 <Double {age} />

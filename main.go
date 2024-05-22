@@ -133,10 +133,31 @@ func applyProps(content string, props map[string]any) string {
 }
 
 func renderConditions(content string, props map[string]any) string {
-	reCondition := regexp.MustCompile(`(?s){if\s(.*?)}(.*?)({else}?)(.*?)({/if})`)
+	//reCondition := regexp.MustCompile(`(?s){if\s(.*?)}(.*?)({else}?)(.*?)({/if})`)
+	//reCondition := regexp.MustCompile(`(?s){if\s(.*?)}(.*?)({else\sif\s?)({else?)}\s(.*?)({/if})`)
+	reCondition := regexp.MustCompile(`(?s){(if)\s(.*?)}(.*?)(?:{(?:(else\sif)\s(.*?)}(.*?)|(?:(else))}(.*?))){0,}{/if}`)
 	matches := reCondition.FindAllStringSubmatch(content, -1)
 	for _, match := range matches {
-		if len(match) > 0 {
+		for i, part := range match {
+			if part == "if" || part == "else if" {
+				//fmt.Println(match[i+1])
+				//fmt.Println(match[i+2])
+				condition := match[i+1]
+				trueContent := match[i+2]
+				if evaluateCondition(condition, props) {
+					content = reCondition.ReplaceAllString(content, trueContent)
+					break
+				}
+			}
+			if part == "else" {
+				trueContent := match[i+1]
+				content = reCondition.ReplaceAllString(content, trueContent)
+				break
+			}
+			//fmt.Println(strconv.Itoa(i) + ": /////////////////")
+			//fmt.Println(part)
+		}
+		/*
 			condition := match[1]
 			trueContent := match[2]
 			falseContent := ""
@@ -148,7 +169,7 @@ func renderConditions(content string, props map[string]any) string {
 			} else {
 				content = reCondition.ReplaceAllString(content, falseContent)
 			}
-		}
+		*/
 	}
 	return content
 }
@@ -163,7 +184,12 @@ func evaluateCondition(condition string, props map[string]any) bool {
 			if l.Err() != io.EOF {
 				fmt.Println("Error: ", l.Err())
 			}
-			result, _ := vm.RunString(condition)
+			fmt.Println(condition)
+			result, err := vm.RunString(condition)
+			if err != nil {
+				fmt.Println("For condition: " + condition)
+				log.Fatal(err)
+			}
 			return result.ToBoolean()
 		case js.IdentifierToken:
 			value, ok := props[string(text)]
@@ -222,7 +248,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 func anyToString(value any) string {
 	switch value := value.(type) {
 	case string:
-		return value
+		return "'" + value + "'"
 	case int:
 		return strconv.Itoa(value)
 	case int64:
@@ -235,7 +261,7 @@ func anyToString(value any) string {
 
 func main() {
 	// Render the template with data
-	props := map[string]any{"name": "John", "age": 25}
+	props := map[string]any{"name": "John", "age": 5}
 	markup, script, style := Render("views/home.html", props)
 	fmt.Println(markup)
 	fmt.Println(script)
