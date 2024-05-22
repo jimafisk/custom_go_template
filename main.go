@@ -137,17 +137,18 @@ func renderConditions(markup string, props map[string]any) string {
 	matches := reCondition.FindAllStringSubmatch(markup, -1)
 	for _, match := range matches {
 		for i, part := range match {
+			full_match := match[0]
 			if part == "if" || part == "else if" {
 				condition := match[i+1]
 				result := match[i+2]
 				if evaluateCondition(condition, props) {
-					markup = reCondition.ReplaceAllString(markup, result)
+					markup = strings.Replace(markup, full_match, result, 1)
 					break
 				}
 			}
 			if part == "else" {
 				result := match[i+1]
-				markup = reCondition.ReplaceAllString(markup, result)
+				markup = strings.Replace(markup, full_match, result, 1)
 				break
 			}
 		}
