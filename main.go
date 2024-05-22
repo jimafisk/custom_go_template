@@ -136,8 +136,8 @@ func renderConditions(markup string, props map[string]any) string {
 	reCondition := regexp.MustCompile(`(?s){(if)\s(.*?)}(.*?)(?:{(?:(else\sif)\s(.*?)}(.*?)|(?:(else))}(.*?))){0,}{/if}`)
 	matches := reCondition.FindAllStringSubmatch(markup, -1)
 	for _, match := range matches {
+		full_match := match[0]
 		for i, part := range match {
-			full_match := match[0]
 			if part == "if" || part == "else if" {
 				condition := match[i+1]
 				result := match[i+2]
@@ -152,6 +152,7 @@ func renderConditions(markup string, props map[string]any) string {
 				break
 			}
 		}
+		markup = strings.Replace(markup, full_match, "", 1) // Did not match any conditions, just remove it
 	}
 	return markup
 }
