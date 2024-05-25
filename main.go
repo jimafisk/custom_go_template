@@ -41,6 +41,8 @@ func Render(path string, props map[string]any) (string, string, string) {
 	markup = applyProps(markup, props)
 	// Run template conditions {if}{else}{/if}
 	markup = renderConditions(markup, props)
+	// Run template loops {for let _ in _}{/for} and {for let _ of _}{/for}
+	// markup = renderLoops(markup, props)
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
 
@@ -182,6 +184,113 @@ func evaluateCondition(condition string, props map[string]any) bool {
 			//fmt.Println("Token Type is: " + js.TokenType(tt).String())
 		}
 	}
+}
+
+func renderLoops(markup string, props map[string]any) string {
+	reLoop := regexp.MustCompile(`(?s){for\slet\s(.*?)\s(of|in)\s(.*?)}(.*?){/for}`)
+	matches := reLoop.FindAllStringSubmatch(markup, -1)
+	for _, match := range matches {
+		full_match := match[0]
+		for i, part := range match {
+			if part == "of" {
+				//iterator := match[i-1]
+				collection := match[i+1]
+				//result := match[i+2]
+				full_result := ""
+				collection_value, ok := props[collection]
+				if !ok {
+					collection_value = collection
+				}
+				items := evaluateLoop(anyToString(collection_value))
+				fmt.Println(items)
+				//for _, item := range collection {
+				//	fmt.Println(item)
+				//}
+				//fmt.Println(result)
+				//fmt.Println(collection_value)
+				//items := evaluateLoop(anyToString(collection_value))
+				//fmt.Println(items)
+				/*
+					for key, value := range items {
+						fmt.Println(key)
+						fmt.Println(value)
+						full_result = full_result + result
+					}
+				*/
+				markup = strings.Replace(markup, full_match, full_result, 1)
+				break
+			}
+			if part == "in" {
+				result := match[i+1]
+				markup = strings.Replace(markup, full_match, result, 1)
+				break
+			}
+		}
+		markup = strings.Replace(markup, full_match, "", 1) // Did not match any conditions, just remove it
+	}
+	return markup
+}
+
+func evaluateLoop(collection_value string) map[string]string {
+	vm := goja.New()
+	//v, err := vm.RunString("collection_value = " + collection_value + ";")
+	v, err := vm.RunString(collection_value)
+	if err != nil {
+		log.Fatal(err)
+	}
+	//r := []string{}
+	r := v.Export().([]string)
+	//vm.ExportTo(v, r)
+	fmt.Println(r)
+	return map[string]string{}
+	//for i, j range := r {
+	//}
+	/*
+		items := map[string]string{}
+		//items := []string{}
+		thing := vm.Get("collection_value").ToObject(vm)
+		//things := thing.Keys()
+		//things := thing.Symbols()
+		//things :=
+		fmt.Println(reflect.TypeOf(things))
+		for i, t := range things {
+			fmt.Println(i)
+			fmt.Println(t)
+		}
+		fmt.Println(v)
+		return items
+	*/
+	//items := []string{}
+	/*
+		vm.Set("t", items)
+		fmt.Println(v)
+		fmt.Println(items)
+		vm.ExportTo(v, items)
+		vm.NewArray()
+		goja.ArrayBuffer.Bytes()
+		*.
+		//items = v.ExportTo().([]string)
+		//items = v.Export().([]string)
+		//items = v.ToObject(vm)
+		/*
+			ex := vm.Try(func() {
+				vm.ForOf(v, func(v goja.Value) bool {
+					fmt.Println(v)
+					o := v.ToObject(vm)
+					key := o.Get("0")
+					value := o.Get("1")
+					if value != nil {
+						//fmt.Println(key)
+						//fmt.Println(value)
+						items[key.String()] = value.String()
+					}
+					return true
+				})
+			})
+			if ex != nil {
+				panic(ex)
+			}
+	*/
 }
 
 func getComponents(fence string) (string, []Component) {

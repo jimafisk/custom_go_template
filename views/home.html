@@ -20,5 +20,8 @@ let age;
 		{if age > 0}
 			<Age {name} {age} />
 		{/if}
+		{for let animal of ["cat", "dog", "whale"]}
+			<div>Animal is: {animal}</div>
+		{/for}
 	</body>
 </html>
