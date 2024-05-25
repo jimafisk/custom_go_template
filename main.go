@@ -3,7 +3,9 @@ package main
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"log"
+	"net/http"
 	"os"
 	"reflect"
 	"regexp"
@@ -46,6 +48,12 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
 
+	ast, err := js.Parse(parse.NewInputString(script), js.Options{})
+	if err != nil {
+		panic(err)
+	}
+	script = ast.JSString()
+
 	return markup, script, style
 }
 
@@ -65,26 +73,26 @@ func templateParts(template string) (string, string, string, string) {
 	if len(styles) > 1 {
 		log.Fatal("Can only have one set of Style tags (<style></style>) per template")
 	}
-	dom := template
+	markup := template
 	fence := ""
 	script := ""
 	style := ""
 	if len(fences) > 0 {
 		wrapped_fence := fences[0][0]
 		fence = fences[0][1]
-		dom = strings.Replace(template, wrapped_fence, "", 1)
+		markup = strings.Replace(markup, wrapped_fence, "", 1)
 	}
 	if len(scripts) > 0 {
 		wrapped_script := scripts[0][0]
 		script = scripts[0][1]
-		dom = strings.Replace(template, wrapped_script, "", 1)
+		markup = strings.Replace(markup, wrapped_script, "", 1)
 	}
 	if len(styles) > 0 {
 		wrapped_style := styles[0][0]
 		style = styles[0][1]
-		dom = strings.Replace(template, wrapped_style, "", 1)
+		markup = strings.Replace(markup, wrapped_style, "", 1)
 	}
-	return dom, fence, script, style
+	return markup, fence, script, style
 }
 
 func setProps(script string, props map[string]any) string {
@@ -354,7 +362,11 @@ func main() {
 	// Render the template with data
 	props := map[string]any{"name": "John", "age": 22}
 	markup, script, style := Render("views/home.html", props)
-	fmt.Println(markup)
-	fmt.Println(script)
-	fmt.Println(style)
+	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
+	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
+	os.WriteFile("./public/index.html", []byte(markup), fs.ModePerm)
+
+	http.Handle("/", http.FileServer(http.Dir("./public")))
+	fmt.Println("visit site at: http://localhost:3000")
+	http.ListenAndServe(":3000", nil)
 }
