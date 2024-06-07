@@ -6,8 +6,10 @@ let age;
 ---
 
 <script>
-	let d = document.querySelector("div");
-	d.appendChild("strong");
+	document.addEventListener("DOMContentLoaded", function() {
+		let d = document.querySelector("div");
+		d.style.border = "1px solid red";
+	})
 </script>
 
 <div>{name}'s age is: {age}</div>
