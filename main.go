@@ -201,19 +201,19 @@ func renderLoops(markup string, props map[string]any) string {
 		full_match := match[0]
 		for i, part := range match {
 			if part == "of" {
-				//iterator := match[i-1]
+				iterator := match[i-1]
 				collection := match[i+1]
-				//result := match[i+2]
+				result := match[i+2]
 				full_result := ""
 				collection_value, ok := props[collection]
 				if !ok {
 					collection_value = collection
 				}
 				items := evaluateLoop(anyToString(collection_value))
-				for key, value := range items {
-					fmt.Println(key)
-					fmt.Println(value)
-					//full_result = full_result + result
+				for _, value := range items {
+					reLoopVar := regexp.MustCompile(`{` + iterator + `}`)
+					evaluated_result := reLoopVar.ReplaceAllString(result, value)
+					full_result = full_result + evaluated_result
 				}
 				markup = strings.Replace(markup, full_match, full_result, 1)
 				break
