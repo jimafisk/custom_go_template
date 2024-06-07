@@ -5,13 +5,13 @@ age = age * 2;
 ---
 
 <script>
-	let ds = document.querySelectorAll("div");
+	let ds = document.querySelectorAll("div.double");
 	ds.forEach(d => {
-		d.style.color = "red";
+		d.style.color = "green";
 	})
 </script>
 
-<div>Double age is: {age}</div>
+<div class="double">Double age is: {age}</div>
 
 {if age > 40}
 	<div>Over the hill</div>
