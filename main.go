@@ -1,10 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
 	"fmt"
 	"io"
 	"io/fs"
 	"log"
+	"math/big"
 	"net/http"
 	"os"
 	"reflect"
@@ -14,6 +16,7 @@ import (
 
 	"github.com/dop251/goja"
 	"github.com/tdewolff/parse/v2"
+	"github.com/tdewolff/parse/v2/html"
 	"github.com/tdewolff/parse/v2/js"
 )
 
@@ -35,6 +38,8 @@ func Render(path string, props map[string]any) (string, string, string) {
 	markup, fence, script, style := templateParts(template)
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(fence)
+	// Add scoped classes to html
+	markup, script, style = scopedClasses(markup, script, style)
 	// Set the prop to the value that's passed in
 	fence = setProps(fence, props)
 	// Run the JS in Goja to get the computed values for props
@@ -55,6 +60,83 @@ func Render(path string, props map[string]any) (string, string, string) {
 	script = ast.JSString()
 
 	return markup, script, style
+}
+
+type scopedElement struct {
+	signature   string
+	identifiers []string
+	scopedClass string
+}
+
+func scopedClasses(markup, script, style string) (string, string, string) {
+	//elementSignatures := []string{}
+	scopedElements := []scopedElement{}
+	l := html.NewLexer(parse.NewInputString(markup))
+	for {
+		tt, data := l.Next()
+		switch tt {
+		case html.ErrorToken:
+			if l.Err() != io.EOF {
+				fmt.Println("Error: ", l.Err())
+			}
+			//fmt.Println(elementSignatures)
+			fmt.Println(scopedElements)
+			return markup, script, style
+		case html.StartTagToken:
+			//fmt.Println("Tag", string(data))
+			tag := strings.TrimPrefix(string(data), "<")
+			signature := tag
+			identifiers := []string{tag}
+			for {
+				ttAttr, dataAttr := l.Next()
+				if ttAttr != html.AttributeToken {
+					break
+				}
+				if false {
+					//fmt.Println(ttAttr)
+					fmt.Println("Attribute", string(dataAttr))
+				}
+
+				key := string(l.AttrKey())
+				val := strings.Trim(string(l.AttrVal()), `"`)
+				if key == "id" {
+					signature = signature + "#" + val
+					identifiers = append(identifiers, "#"+val)
+				}
+				if key == "class" {
+					classes := strings.Split(val, " ")
+					for _, class := range classes {
+						signature = signature + "." + class
+						identifiers = append(identifiers, "."+class)
+					}
+				}
+			}
+			randomStr, err := generateRandom()
+			if err != nil {
+				log.Fatal(err)
+			}
+			//elementSignatures = append(elementSignatures, scopedElement{
+			scopedElements = append(scopedElements, scopedElement{
+				signature:   signature,
+				identifiers: identifiers,
+				scopedClass: "plenti-" + randomStr,
+			})
+			// ...
+		}
+	}
+}
+
+func generateRandom() (string, error) {
+	chars := "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	var bytes = make([]byte, 6)
+	for i := range bytes {
+		num, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			return "", err
+		}
+		bytes[i] = chars[num.Int64()]
+	}
+	return string(bytes), nil
 }
 
 func templateParts(template string) (string, string, string, string) {

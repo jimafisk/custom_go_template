@@ -6,7 +6,7 @@ let age;
 ---
 
 <!DOCTYPE html>
-<html>
+<html lang="en">
 	<head>
 		<title>Test</title>
 		<script defer type="text/javascript" src="/script.js"></script>
@@ -14,7 +14,7 @@ let age;
 	<body>
 		<h1>Hi {name}</h1>
 		{if name === "John"}
-			<div>John is great</div>
+			<div id="praise">John is great</div>
 		{else}
 			<div>Not sure who you are, but you're probably great</div>
 		{/if}
@@ -22,7 +22,7 @@ let age;
 			<Age {name} {age} />
 		{/if}
 		{for let animal of ["cat", "dog", "whale"]}
-			<div>Animal is: {animal}</div>
+			<div>{name} likes: {animal}s</div>
 		{/for}
 	</body>
 </html>
