@@ -14,9 +14,10 @@ import (
 	"strconv"
 	"strings"
 
+	"golang.org/x/net/html"
+
 	"github.com/dop251/goja"
 	"github.com/tdewolff/parse/v2"
-	"github.com/tdewolff/parse/v2/html"
 	"github.com/tdewolff/parse/v2/js"
 )
 
@@ -38,8 +39,6 @@ func Render(path string, props map[string]any) (string, string, string) {
 	markup, fence, script, style := templateParts(template)
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(fence)
-	// Add scoped classes to html
-	markup, script, style = scopedClasses(markup, script, style)
 	// Set the prop to the value that's passed in
 	fence = setProps(fence, props)
 	// Run the JS in Goja to get the computed values for props
@@ -52,6 +51,8 @@ func Render(path string, props map[string]any) (string, string, string) {
 	markup = renderLoops(markup, props)
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
+	// Add scoped classes to html
+	markup, script, style = scopedClasses(markup, script, style)
 
 	ast, err := js.Parse(parse.NewInputString(script), js.Options{})
 	if err != nil {
@@ -69,61 +70,100 @@ type scopedElement struct {
 }
 
 func scopedClasses(markup, script, style string) (string, string, string) {
-	//elementSignatures := []string{}
-	scopedElements := []scopedElement{}
-	l := html.NewLexer(parse.NewInputString(markup))
-	for {
-		tt, data := l.Next()
-		switch tt {
-		case html.ErrorToken:
-			if l.Err() != io.EOF {
-				fmt.Println("Error: ", l.Err())
-			}
-			//fmt.Println(elementSignatures)
-			fmt.Println(scopedElements)
-			return markup, script, style
-		case html.StartTagToken:
-			//fmt.Println("Tag", string(data))
-			tag := strings.TrimPrefix(string(data), "<")
-			signature := tag
-			identifiers := []string{tag}
-			for {
-				ttAttr, dataAttr := l.Next()
-				if ttAttr != html.AttributeToken {
-					break
+	node, _ := html.Parse(strings.NewReader(markup))
+	var traverse func(*html.Node)
+	traverse = func(node *html.Node) {
+		if node.Type == html.ElementNode {
+			fmt.Printf("Element: %s\n", node.Data)
+			for i, attr := range node.Attr {
+				if attr.Key == "id" {
+					fmt.Printf("ID: %s\n", attr.Val)
 				}
-				if false {
-					//fmt.Println(ttAttr)
-					fmt.Println("Attribute", string(dataAttr))
-				}
-
-				key := string(l.AttrKey())
-				val := strings.Trim(string(l.AttrVal()), `"`)
-				if key == "id" {
-					signature = signature + "#" + val
-					identifiers = append(identifiers, "#"+val)
-				}
-				if key == "class" {
-					classes := strings.Split(val, " ")
-					for _, class := range classes {
-						signature = signature + "." + class
-						identifiers = append(identifiers, "."+class)
-					}
+				if attr.Key == "class" {
+					fmt.Printf("Classes: %s\n", attr.Val)
+					node.Attr[i].Val += " new-class"
 				}
 			}
 			randomStr, err := generateRandom()
 			if err != nil {
 				log.Fatal(err)
 			}
-			//elementSignatures = append(elementSignatures, scopedElement{
-			scopedElements = append(scopedElements, scopedElement{
-				signature:   signature,
-				identifiers: identifiers,
-				scopedClass: "plenti-" + randomStr,
-			})
-			// ...
+			newClass := "plenti-" + randomStr
+			node.Attr = append(node.Attr, html.Attribute{Key: "class", Val: newClass})
+		}
+		for child := node.FirstChild; child != nil; child = child.NextSibling {
+			traverse(child)
 		}
 	}
+	traverse(node)
+
+	// Render the modified HTML back to a string
+	buf := &strings.Builder{}
+	err := html.Render(buf, node)
+	if err != nil {
+		log.Fatal(err)
+	}
+	markup = html.UnescapeString(buf.String())
+	fmt.Println(markup)
+
+	return markup, script, style
+	/*
+		//elementSignatures := []string{}
+		scopedElements := []scopedElement{}
+		l := html.NewLexer(parse.NewInputString(markup))
+		for {
+			tt, data := l.Next()
+			switch tt {
+			case html.ErrorToken:
+				if l.Err() != io.EOF {
+					fmt.Println("Error: ", l.Err())
+				}
+				//fmt.Println(elementSignatures)
+				fmt.Println(scopedElements)
+				return markup, script, style
+			case html.StartTagToken:
+				//fmt.Println("Tag", string(data))
+				tag := strings.TrimPrefix(string(data), "<")
+				signature := tag
+				identifiers := []string{tag}
+				for {
+					ttAttr, dataAttr := l.Next()
+					if ttAttr != html.AttributeToken {
+						break
+					}
+					if false {
+						//fmt.Println(ttAttr)
+						fmt.Println("Attribute", string(dataAttr))
+					}
+
+					key := string(l.AttrKey())
+					val := strings.Trim(string(l.AttrVal()), `"`)
+					if key == "id" {
+						signature = signature + "#" + val
+						identifiers = append(identifiers, "#"+val)
+					}
+					if key == "class" {
+						classes := strings.Split(val, " ")
+						for _, class := range classes {
+							signature = signature + "." + class
+							identifiers = append(identifiers, "."+class)
+						}
+					}
+				}
+				randomStr, err := generateRandom()
+				if err != nil {
+					log.Fatal(err)
+				}
+				//elementSignatures = append(elementSignatures, scopedElement{
+				scopedElements = append(scopedElements, scopedElement{
+					signature:   signature,
+					identifiers: identifiers,
+					scopedClass: "plenti-" + randomStr,
+				})
+				// ...
+			}
+		}
+	*/
 }
 
 func generateRandom() (string, error) {
