@@ -64,32 +64,50 @@ func Render(path string, props map[string]any) (string, string, string) {
 }
 
 type scopedElement struct {
-	signature   string
-	identifiers []string
+	tag         string
+	id          string
+	classes     []string
 	scopedClass string
 }
 
 func scopedClasses(markup, script, style string) (string, string, string) {
+	scopedElements := []scopedElement{}
 	node, _ := html.Parse(strings.NewReader(markup))
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
 		if node.Type == html.ElementNode {
-			fmt.Printf("Element: %s\n", node.Data)
-			for i, attr := range node.Attr {
+			tag := node.Data
+			id := ""
+			classes := []string{}
+
+			for _, attr := range node.Attr {
 				if attr.Key == "id" {
-					fmt.Printf("ID: %s\n", attr.Val)
+					id = attr.Val
 				}
 				if attr.Key == "class" {
-					fmt.Printf("Classes: %s\n", attr.Val)
-					node.Attr[i].Val += " new-class"
+					classes = strings.Split(attr.Val, " ")
 				}
 			}
-			randomStr, err := generateRandom()
-			if err != nil {
-				log.Fatal(err)
+
+			scopedClass := getTagScopedClass(tag, scopedElements)
+
+			if scopedClass == "" {
+				// There wasn't an existing scoped class for the element, so create one
+				randomStr, err := generateRandom()
+				if err != nil {
+					log.Fatal(err)
+				}
+				scopedClass = "plenti-" + randomStr
 			}
-			newClass := "plenti-" + randomStr
-			node.Attr = append(node.Attr, html.Attribute{Key: "class", Val: newClass})
+
+			scopedElements = append(scopedElements, scopedElement{
+				tag:         tag,
+				id:          id,
+				classes:     classes,
+				scopedClass: scopedClass,
+			})
+
+			node.Attr = append(node.Attr, html.Attribute{Key: "class", Val: scopedClass})
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
 			traverse(child)
@@ -104,66 +122,17 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 		log.Fatal(err)
 	}
 	markup = html.UnescapeString(buf.String())
-	fmt.Println(markup)
 
 	return markup, script, style
-	/*
-		//elementSignatures := []string{}
-		scopedElements := []scopedElement{}
-		l := html.NewLexer(parse.NewInputString(markup))
-		for {
-			tt, data := l.Next()
-			switch tt {
-			case html.ErrorToken:
-				if l.Err() != io.EOF {
-					fmt.Println("Error: ", l.Err())
-				}
-				//fmt.Println(elementSignatures)
-				fmt.Println(scopedElements)
-				return markup, script, style
-			case html.StartTagToken:
-				//fmt.Println("Tag", string(data))
-				tag := strings.TrimPrefix(string(data), "<")
-				signature := tag
-				identifiers := []string{tag}
-				for {
-					ttAttr, dataAttr := l.Next()
-					if ttAttr != html.AttributeToken {
-						break
-					}
-					if false {
-						//fmt.Println(ttAttr)
-						fmt.Println("Attribute", string(dataAttr))
-					}
+}
 
-					key := string(l.AttrKey())
-					val := strings.Trim(string(l.AttrVal()), `"`)
-					if key == "id" {
-						signature = signature + "#" + val
-						identifiers = append(identifiers, "#"+val)
-					}
-					if key == "class" {
-						classes := strings.Split(val, " ")
-						for _, class := range classes {
-							signature = signature + "." + class
-							identifiers = append(identifiers, "."+class)
-						}
-					}
-				}
-				randomStr, err := generateRandom()
-				if err != nil {
-					log.Fatal(err)
-				}
-				//elementSignatures = append(elementSignatures, scopedElement{
-				scopedElements = append(scopedElements, scopedElement{
-					signature:   signature,
-					identifiers: identifiers,
-					scopedClass: "plenti-" + randomStr,
-				})
-				// ...
-			}
+func getTagScopedClass(tag string, scopedElements []scopedElement) string {
+	for _, elem := range scopedElements {
+		if elem.tag == tag {
+			return elem.scopedClass
 		}
-	*/
+	}
+	return ""
 }
 
 func generateRandom() (string, error) {
