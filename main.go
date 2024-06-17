@@ -79,16 +79,6 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 			tag := node.Data
 			id := ""
 			classes := []string{}
-
-			for _, attr := range node.Attr {
-				if attr.Key == "id" {
-					id = attr.Val
-				}
-				if attr.Key == "class" {
-					classes = strings.Split(attr.Val, " ")
-				}
-			}
-
 			scopedClass := getTagScopedClass(tag, scopedElements)
 
 			if scopedClass == "" {
@@ -100,14 +90,34 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 				scopedClass = "plenti-" + randomStr
 			}
 
+			for i, attr := range node.Attr {
+				if attr.Key == "id" {
+					id = attr.Val
+				}
+				if attr.Key == "class" {
+					classes = strings.Split(attr.Val, " ")
+					alreadyScoped := false
+					for _, class := range classes {
+						if strings.HasPrefix(class, "plenti-") {
+							alreadyScoped = true
+						}
+					}
+					if !alreadyScoped {
+						node.Attr[i].Val += " " + scopedClass
+					}
+				}
+			}
+
+			if len(classes) == 0 {
+				node.Attr = append(node.Attr, html.Attribute{Key: "class", Val: scopedClass})
+			}
+
 			scopedElements = append(scopedElements, scopedElement{
 				tag:         tag,
 				id:          id,
 				classes:     classes,
 				scopedClass: scopedClass,
 			})
-
-			node.Attr = append(node.Attr, html.Attribute{Key: "class", Val: scopedClass})
 		}
 		for child := node.FirstChild; child != nil; child = child.NextSibling {
 			traverse(child)
