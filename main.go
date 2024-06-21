@@ -19,6 +19,7 @@ import (
 	"github.com/dop251/goja"
 	"github.com/tdewolff/parse/v2"
 	"github.com/tdewolff/parse/v2/js"
+	"github.com/vanng822/css"
 )
 
 type Component struct {
@@ -136,33 +137,56 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 	return markup, script, style
 }
 
+type selector struct {
+	element string
+	classes []string
+	id      string
+}
+
 func scopedCSS(style string) {
-	reElement := regexp.MustCompile(`(?P<element>[^\.#\[]+)`)
-	reClass := regexp.MustCompile(`(?P<class>[^.#\[]+)`)
-	reId := regexp.MustCompile(`(?P<id>[^.#\[]+)`)
-	reAttrName := regexp.MustCompile(`(?P<attr_name>[^=\]]+)`)
-	reAttrValue := regexp.MustCompile(`(?P<attr_value>[^"]+)`)
-	reStyles := regexp.MustCompile(`(?P<styles>(?:[^{}]+(?:{[^{}]+})*))`)
-
-	re := regexp.MustCompile(`(?:` + reElement.String() + `)(?:\.(?:` + reClass.String() + `))?(?:#(?:` + reId.String() + `))?(?:\[(?:` + reAttrName.String() + `)(?:=(?:` + reAttrValue.String() + `))?\])?(?:{(?:` + reStyles.String() + `)})`)
-	match := re.FindAllStringSubmatch(style, -1)
-
-	for _, match := range match {
-		element := strings.TrimSpace(match[re.SubexpIndex("element")])
-		class := strings.TrimSpace(match[re.SubexpIndex("class")])
-		id := strings.TrimSpace(match[re.SubexpIndex("id")])
-		attr_name := strings.TrimSpace(match[re.SubexpIndex("attr_name")])
-		attr_value := strings.TrimSpace(match[re.SubexpIndex("attr_value")])
-		styles := strings.TrimSpace(match[re.SubexpIndex("styles")])
-
-		fmt.Println("Element:", element)
-		fmt.Println("Class:", class)
-		fmt.Println("ID:", id)
-		fmt.Println("Attribute Name:", attr_name)
-		fmt.Println("Attribute Value:", attr_value)
-		fmt.Println("Styles:", styles)
-		fmt.Println("")
+	ss := css.Parse(style)
+	rules := ss.GetCSSRuleList()
+	for _, rule := range rules {
+		tokens := rule.Style.Selector.Tokens
+		//element := ""
+		//classes := []string{}
+		//id := ""
+		selectors := []selector{{}}
+		fmt.Println("\nNEW SELECTOR")
+		selector_index := 0
+		for i, token := range tokens {
+			//nested := strings.Split(token.String(), " ")
+			if token.Type.String() == "S" && i+1 != len(tokens) {
+				selector_index++
+				selectors = append(selectors, selector{})
+			}
+			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
+				//element = token.Value
+				selectors[selector_index].element = token.Value
+			}
+			if token.Type.String() == "CHAR" && token.Value == "." {
+				//classes = append(classes, tokens[i+1].Value)
+				selectors[selector_index].classes = append(selectors[selector_index].classes, tokens[i+1].Value)
+			}
+			if token.Type.String() == "HASH" {
+				//id = strings.TrimPrefix(token.Value, "#")
+				selectors[selector_index].id = strings.TrimPrefix(token.Value, "#")
+			}
+			/*
+				fmt.Println("type: " + token.Type.String())
+				fmt.Println("value: " + token.Value)
+				fmt.Println(token)
+				fmt.Println()
+			*/
+		}
+		//fmt.Println("Element:", element)
+		//fmt.Println("Classes:", classes)
+		//fmt.Println("ID:", id)
+		fmt.Println(selectors)
+		//fmt.Println(rule.Style.Selector.Text())
+		//fmt.Println(rule.Style.Styles)
 	}
+
 }
 
 func getTagScopedClass(tag string, scopedElements []scopedElement) string {
