@@ -132,7 +132,6 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 		log.Fatal(err)
 	}
 	markup = html.UnescapeString(buf.String())
-	scopedCSS(style)
 
 	return markup, script, style
 }
@@ -149,12 +148,12 @@ func scopedCSS(style string) {
 	match := re.FindAllStringSubmatch(style, -1)
 
 	for _, match := range match {
-		element := match[re.SubexpIndex("element")]
-		class := match[re.SubexpIndex("class")]
-		id := match[re.SubexpIndex("id")]
-		attr_name := match[re.SubexpIndex("attr_name")]
-		attr_value := match[re.SubexpIndex("attr_value")]
-		styles := match[re.SubexpIndex("styles")]
+		element := strings.TrimSpace(match[re.SubexpIndex("element")])
+		class := strings.TrimSpace(match[re.SubexpIndex("class")])
+		id := strings.TrimSpace(match[re.SubexpIndex("id")])
+		attr_name := strings.TrimSpace(match[re.SubexpIndex("attr_name")])
+		attr_value := strings.TrimSpace(match[re.SubexpIndex("attr_value")])
+		styles := strings.TrimSpace(match[re.SubexpIndex("styles")])
 
 		fmt.Println("Element:", element)
 		fmt.Println("Class:", class)
@@ -438,6 +437,7 @@ func main() {
 	// Render the template with data
 	props := map[string]any{"name": "John", "age": 22}
 	markup, script, style := Render("views/home.html", props)
+	scopedCSS(style)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
 	os.WriteFile("./public/index.html", []byte(markup), fs.ModePerm)
