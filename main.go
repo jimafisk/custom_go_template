@@ -132,8 +132,38 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 		log.Fatal(err)
 	}
 	markup = html.UnescapeString(buf.String())
+	scopedCSS(style)
 
 	return markup, script, style
+}
+
+func scopedCSS(style string) {
+	reElement := regexp.MustCompile(`(?P<element>[^\.#\[]+)`)
+	reClass := regexp.MustCompile(`(?P<class>[^.#\[]+)`)
+	reId := regexp.MustCompile(`(?P<id>[^.#\[]+)`)
+	reAttrName := regexp.MustCompile(`(?P<attr_name>[^=\]]+)`)
+	reAttrValue := regexp.MustCompile(`(?P<attr_value>[^"]+)`)
+	reStyles := regexp.MustCompile(`(?P<styles>(?:[^{}]+(?:{[^{}]+})*))`)
+
+	re := regexp.MustCompile(`(?:` + reElement.String() + `)(?:\.(?:` + reClass.String() + `))?(?:#(?:` + reId.String() + `))?(?:\[(?:` + reAttrName.String() + `)(?:=(?:` + reAttrValue.String() + `))?\])?(?:{(?:` + reStyles.String() + `)})`)
+	match := re.FindAllStringSubmatch(style, -1)
+
+	for _, match := range match {
+		element := match[re.SubexpIndex("element")]
+		class := match[re.SubexpIndex("class")]
+		id := match[re.SubexpIndex("id")]
+		attr_name := match[re.SubexpIndex("attr_name")]
+		attr_value := match[re.SubexpIndex("attr_value")]
+		styles := match[re.SubexpIndex("styles")]
+
+		fmt.Println("Element:", element)
+		fmt.Println("Class:", class)
+		fmt.Println("ID:", id)
+		fmt.Println("Attribute Name:", attr_name)
+		fmt.Println("Attribute Value:", attr_value)
+		fmt.Println("Styles:", styles)
+		fmt.Println("")
+	}
 }
 
 func getTagScopedClass(tag string, scopedElements []scopedElement) string {

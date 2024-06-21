@@ -13,15 +13,33 @@ let age;
 <div>{name}'s age is: {age}</div>
 
 {if age > 200}
-	<div>Dead</div>
+	<div class="dead">Dead</div>
 {else if age > 80}
-	<div>Well done</div>
+	<div class="old">Well done</div>
 {else if age > 40}
-	<div>Over the hill</div>
+	<div class="mid">Over the hill</div>
 {else if age > 21}
-	<div>Can drink</div>
+	<div class="young">Can drink</div>
 {else}
-	<div>Just a baby</div>
+	<div class="new">Just a baby</div>
 {/if}
 
 <Double {age} />
+
+<style>
+	div.dead {
+		color: red;
+	}
+	div.old {
+		color: green;
+	}
+	.mid {
+		color: orange;
+	}
+	.young {
+		color: blue;
+	}
+	.new {
+		color: pink;
+	}
+</style>
