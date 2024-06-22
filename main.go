@@ -237,7 +237,7 @@ func templateParts(template string) (string, string, string, string) {
 
 func setProps(script string, props map[string]any) string {
 	for name, value := range props {
-		reProp := regexp.MustCompile(fmt.Sprintf(`let (%s);`, name))
+		reProp := regexp.MustCompile(fmt.Sprintf(`prop (%s);`, name))
 		switch value := value.(type) {
 		case string:
 			script = reProp.ReplaceAllString(script, "let "+name+"='"+value+"';")
