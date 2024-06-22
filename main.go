@@ -148,43 +148,29 @@ func scopedCSS(style string) {
 	rules := ss.GetCSSRuleList()
 	for _, rule := range rules {
 		tokens := rule.Style.Selector.Tokens
-		//element := ""
-		//classes := []string{}
-		//id := ""
 		selectors := []selector{{}}
 		fmt.Println("\nNEW SELECTOR")
 		selector_index := 0
 		for i, token := range tokens {
-			//nested := strings.Split(token.String(), " ")
 			if token.Type.String() == "S" && i+1 != len(tokens) {
+				// Space indicates a nested selector
 				selector_index++
 				selectors = append(selectors, selector{})
 			}
 			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
-				//element = token.Value
-				selectors[selector_index].element = token.Value
+				element := token.Value
+				selectors[selector_index].element = element
 			}
-			if token.Type.String() == "CHAR" && token.Value == "." {
-				//classes = append(classes, tokens[i+1].Value)
-				selectors[selector_index].classes = append(selectors[selector_index].classes, tokens[i+1].Value)
+			if token.Type.String() == "CHAR" && token.Value == "." && i+1 > len(tokens) {
+				class := tokens[i+1].Value
+				selectors[selector_index].classes = append(selectors[selector_index].classes, class)
 			}
 			if token.Type.String() == "HASH" {
-				//id = strings.TrimPrefix(token.Value, "#")
-				selectors[selector_index].id = strings.TrimPrefix(token.Value, "#")
+				id := strings.TrimPrefix(token.Value, "#")
+				selectors[selector_index].id = id
 			}
-			/*
-				fmt.Println("type: " + token.Type.String())
-				fmt.Println("value: " + token.Value)
-				fmt.Println(token)
-				fmt.Println()
-			*/
 		}
-		//fmt.Println("Element:", element)
-		//fmt.Println("Classes:", classes)
-		//fmt.Println("ID:", id)
 		fmt.Println(selectors)
-		//fmt.Println(rule.Style.Selector.Text())
-		//fmt.Println(rule.Style.Styles)
 	}
 
 }
