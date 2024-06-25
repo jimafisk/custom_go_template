@@ -275,9 +275,11 @@ func getAllVars(fence string) []string {
 func evaluateProps(fence string, allVars []string, props map[string]any) map[string]any {
 	vm := goja.New()
 	vm.RunString(fence)
-	//for name := range props {
 	for _, name := range allVars {
 		evaluated_value := vm.Get(name).Export()
+		if evaluated_value == nil {
+			evaluated_value = ""
+		}
 		props[name] = evaluated_value
 	}
 	return props
