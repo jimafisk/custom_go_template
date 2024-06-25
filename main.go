@@ -41,9 +41,11 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(fence)
 	// Set the prop to the value that's passed in
-	fence, props = setProps(fence, props)
+	fence = setProps(fence, props)
+	// Get list of all variables declared in fence
+	allVars := getAllVars(fence)
 	// Run the JS in Goja to get the computed values for props
-	props = evaluateProps(fence, props)
+	props = evaluateProps(fence, allVars, props)
 	// Replace any simple vars in the format {myProp} with the value
 	markup = applyProps(markup, props)
 	// Run template conditions {if}{else}{/if}
@@ -235,7 +237,7 @@ func templateParts(template string) (string, string, string, string) {
 	return markup, fence, script, style
 }
 
-func setProps(fence string, props map[string]any) (string, map[string]any) {
+func setProps(fence string, props map[string]any) string {
 	for name, value := range props {
 		reProp := regexp.MustCompile(fmt.Sprintf(`prop (%s)(\s?=\s?(.*?))?;`, name))
 		switch value := value.(type) {
@@ -254,23 +256,27 @@ func setProps(fence string, props map[string]any) (string, map[string]any) {
 	rePropDefaults := regexp.MustCompile(`prop (.*?);`)
 	fence = rePropDefaults.ReplaceAllString(fence, "let $1;") // Works with equals or not
 
-	reAllVars := regexp.MustCompile(`(?:let|const) (?P<name>.*?)(?:\s?=\s?(?P<value>.*?))?;`)
-	nameIndex := reAllVars.SubexpIndex("name")
-	valueIndex := reAllVars.SubexpIndex("value")
-	allVars := reAllVars.FindAllStringSubmatch(fence, -1)
-	for _, currentVar := range allVars {
-		// Add script vars to props list
-		//props[currentVar[nameIndex]] = strings.Trim(currentVar[valueIndex], `"`)
-		props[currentVar[nameIndex]] = currentVar[valueIndex]
-	}
-
-	return fence, props
+	return fence
 }
 
-func evaluateProps(fence string, props map[string]any) map[string]any {
+func getAllVars(fence string) []string {
+	allVars := []string{}
+	reAllVars := regexp.MustCompile(`(?:let|const|var) (?P<name>.*?)(?:\s?=\s?(?P<value>.*?))?;`)
+	nameIndex := reAllVars.SubexpIndex("name")
+	//valueIndex := reAllVars.SubexpIndex("value")
+	matches := reAllVars.FindAllStringSubmatch(fence, -1)
+	for _, currentVar := range matches {
+		// Don't need to set value since that gets evaluated in Goja
+		allVars = append(allVars, currentVar[nameIndex])
+	}
+	return allVars
+}
+
+func evaluateProps(fence string, allVars []string, props map[string]any) map[string]any {
 	vm := goja.New()
 	vm.RunString(fence)
-	for name := range props {
+	//for name := range props {
+	for _, name := range allVars {
 		evaluated_value := vm.Get(name).Export()
 		props[name] = evaluated_value
 	}
