@@ -41,7 +41,7 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(fence)
 	// Set the prop to the value that's passed in
-	fence = setProps(fence, props)
+	fence, props = setProps(fence, props)
 	// Run the JS in Goja to get the computed values for props
 	props = evaluateProps(fence, props)
 	// Replace any simple vars in the format {myProp} with the value
@@ -235,27 +235,38 @@ func templateParts(template string) (string, string, string, string) {
 	return markup, fence, script, style
 }
 
-func setProps(script string, props map[string]any) string {
+func setProps(fence string, props map[string]any) (string, map[string]any) {
 	for name, value := range props {
-		reProp := regexp.MustCompile(fmt.Sprintf(`prop (%s);`, name))
+		reProp := regexp.MustCompile(fmt.Sprintf(`prop (%s)(\s?=\s?(.*?))?;`, name))
 		switch value := value.(type) {
 		case string:
-			script = reProp.ReplaceAllString(script, "let "+name+"='"+value+"';")
+			fence = reProp.ReplaceAllString(fence, "let "+name+"='"+value+"';")
 		case int:
-			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(value)+";")
+			fence = reProp.ReplaceAllString(fence, "let "+name+"="+strconv.Itoa(value)+";")
 		case int64:
-			script = reProp.ReplaceAllString(script, "let "+name+"="+strconv.Itoa(int(value))+";")
+			fence = reProp.ReplaceAllString(fence, "let "+name+"="+strconv.Itoa(int(value))+";")
 		default:
 			// handle other values
 			fmt.Println(reflect.TypeOf(value))
 		}
 	}
-	return script
+	rePropDefaults := regexp.MustCompile(`prop (?P<name>.*?)(?:\s?=\s?(?P<value>.*?))?;`)
+	nameIndex := rePropDefaults.SubexpIndex("name")
+	valueIndex := rePropDefaults.SubexpIndex("value")
+	unpassedProps := rePropDefaults.FindAllStringSubmatch(fence, -1)
+	for _, unpassedProp := range unpassedProps {
+		// Add unpassed prop defaults to props list
+		props[unpassedProp[nameIndex]] = strings.Trim(unpassedProp[valueIndex], `"`)
+	}
+	// Convert prop to let for unpassed props
+	fence = rePropDefaults.ReplaceAllString(fence, "let $1 = $2;")
+
+	return fence, props
 }
 
-func evaluateProps(script string, props map[string]any) map[string]any {
+func evaluateProps(fence string, props map[string]any) map[string]any {
 	vm := goja.New()
-	vm.RunString(script)
+	vm.RunString(fence)
 	for name := range props {
 		evaluated_value := vm.Get(name).Export()
 		props[name] = evaluated_value

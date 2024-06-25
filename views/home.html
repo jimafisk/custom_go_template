@@ -3,6 +3,7 @@ import Age from "./views/age.html";
 
 prop name;
 prop age;
+prop test = "whatever";
 ---
 
 <!DOCTYPE html>
@@ -14,7 +15,7 @@ prop age;
 	</head>
 	<body>
 		<h1>Hi {name}</h1>
-		<span>Something</span>
+		<span>{test}</span>
 		{if name === "John"}
 			<div id="praise">John is great</div>
 		{else}
