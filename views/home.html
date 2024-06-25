@@ -4,6 +4,8 @@ import Age from "./views/age.html";
 prop name;
 prop age;
 prop test = "whatever";
+
+const salutation = "yo";
 ---
 
 <!DOCTYPE html>
@@ -14,7 +16,7 @@ prop test = "whatever";
 		<link rel="stylesheet" href="style.css">
 	</head>
 	<body>
-		<h1>Hi {name}</h1>
+		<h1>{salutation} {name}</h1>
 		<span>{test}</span>
 		{if name === "John"}
 			<div id="praise">John is great</div>

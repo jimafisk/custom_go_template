@@ -250,16 +250,19 @@ func setProps(fence string, props map[string]any) (string, map[string]any) {
 			fmt.Println(reflect.TypeOf(value))
 		}
 	}
-	rePropDefaults := regexp.MustCompile(`prop (?P<name>.*?)(?:\s?=\s?(?P<value>.*?))?;`)
-	nameIndex := rePropDefaults.SubexpIndex("name")
-	valueIndex := rePropDefaults.SubexpIndex("value")
-	unpassedProps := rePropDefaults.FindAllStringSubmatch(fence, -1)
-	for _, unpassedProp := range unpassedProps {
-		// Add unpassed prop defaults to props list
-		props[unpassedProp[nameIndex]] = strings.Trim(unpassedProp[valueIndex], `"`)
-	}
 	// Convert prop to let for unpassed props
-	fence = rePropDefaults.ReplaceAllString(fence, "let $1 = $2;")
+	rePropDefaults := regexp.MustCompile(`prop (.*?);`)
+	fence = rePropDefaults.ReplaceAllString(fence, "let $1;") // Works with equals or not
+
+	reAllVars := regexp.MustCompile(`(?:let|const) (?P<name>.*?)(?:\s?=\s?(?P<value>.*?))?;`)
+	nameIndex := reAllVars.SubexpIndex("name")
+	valueIndex := reAllVars.SubexpIndex("value")
+	allVars := reAllVars.FindAllStringSubmatch(fence, -1)
+	for _, currentVar := range allVars {
+		// Add script vars to props list
+		//props[currentVar[nameIndex]] = strings.Trim(currentVar[valueIndex], `"`)
+		props[currentVar[nameIndex]] = currentVar[valueIndex]
+	}
 
 	return fence, props
 }
