@@ -94,6 +94,14 @@ func scopeHTML(markup string) (string, []scopedElement) {
 }
 
 func scopeHTMLComp(comp_markup string) (string, []scopedElement) {
+	// We scope components differently than the full document
+	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
+	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
+	// To avoid scoped class conflicts, using html.ParseFragment() returns just the HTML for the component
+	// Separating scopeHTML and scopeHTMLComp allows us to do both (avoid preemptively scoping html/body on comps, but do it on the doc entrypoint)
+	// Related resources:
+	// https://stackoverflow.com/questions/15081119/any-way-to-use-html-parse-without-it-adding-nodes-to-make-a-well-formed-tree
+	// https://nikodoko.com/posts/html-table-parsing/
 	scopedElements := []scopedElement{}
 	fragments := []string{}
 	nodes, _ := html.ParseFragment(strings.NewReader(comp_markup), &html.Node{
@@ -104,16 +112,13 @@ func scopeHTMLComp(comp_markup string) (string, []scopedElement) {
 	for _, node := range nodes {
 		node, scopedElements = traverse(node, scopedElements)
 
-		// Render the modified HTML back to a string
 		buf := &strings.Builder{}
 		err := html.Render(buf, node)
 		if err != nil {
 			log.Fatal(err)
 		}
-		//markup = html.UnescapeString(buf.String())
 		fragments = append(fragments, html.UnescapeString(buf.String()))
 	}
-	//markup = html.UnescapeString(buf.String())
 	comp_markup = ""
 	for _, f := range fragments {
 		comp_markup = comp_markup + f
