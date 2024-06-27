@@ -54,8 +54,10 @@ func Render(path string, props map[string]any) (string, string, string) {
 	markup = renderLoops(markup, props)
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
-	// Add scoped classes to html
-	markup, script, style = scopedClasses(markup, script, style)
+	// Create scoped classes and add to html
+	markup, scopedElements := scopeHTML(markup)
+	// Add scoped classes to css
+	style = scopeCSS(style, scopedElements)
 
 	ast, err := js.Parse(parse.NewInputString(script), js.Options{})
 	if err != nil {
@@ -73,9 +75,18 @@ type scopedElement struct {
 	scopedClass string
 }
 
-func scopedClasses(markup, script, style string) (string, string, string) {
+func scopeHTML(markup string) (string, []scopedElement) {
 	scopedElements := []scopedElement{}
 	node, _ := html.Parse(strings.NewReader(markup))
+	/*
+		// https://nikodoko.com/posts/html-table-parsing/
+		nodes, _ := html.ParseFragment(strings.NewReader(markup), &html.Node{})
+		nodes, _ := html.ParseFragment(strings.NewReader(markup), &html.Node{
+			Type:     html.ElementNode,
+			Data:     "body",
+			DataAtom: atom.Body},
+		)
+	*/
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
 		if node.Type == html.ElementNode {
@@ -127,6 +138,11 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 		}
 	}
 	traverse(node)
+	/*
+		for _, node := range nodes {
+			traverse(node)
+		}
+	*/
 
 	// Render the modified HTML back to a string
 	buf := &strings.Builder{}
@@ -136,44 +152,57 @@ func scopedClasses(markup, script, style string) (string, string, string) {
 	}
 	markup = html.UnescapeString(buf.String())
 
-	return markup, script, style
+	return markup, scopedElements
 }
 
 type selector struct {
-	element string
+	tag     string
 	classes []string
 	id      string
 }
 
-func scopedCSS(style string) {
+func scopeCSS(style string, scopedElements []scopedElement) string {
 	ss := css.Parse(style)
 	rules := ss.GetCSSRuleList()
-	for _, rule := range rules {
+	selectors := [][]selector{}
+	for rule_index, rule := range rules {
 		tokens := rule.Style.Selector.Tokens
-		selectors := []selector{{}}
-		fmt.Println("\nNEW SELECTOR")
+		selectorStr := rule.Style.Selector.Text()
+		selectors = append(selectors, []selector{{}})
+		//fmt.Println("\nNEW SELECTOR")
 		selector_index := 0
 		for i, token := range tokens {
 			if token.Type.String() == "S" && i+1 != len(tokens) {
 				// Space indicates a nested selector
 				selector_index++
-				selectors = append(selectors, selector{})
+				selectors[rule_index] = append(selectors[rule_index], selector{})
+				//selectors = append(selectors, selector{})
 			}
 			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
-				element := token.Value
-				selectors[selector_index].element = element
+				tag := token.Value
+				for _, e := range scopedElements {
+					if e.tag == tag {
+						style = strings.ReplaceAll(style, selectorStr, selectorStr+"."+e.scopedClass)
+						continue
+					}
+				}
+				selectors[rule_index][selector_index].tag = tag
+				//selectors[selector_index].tag = tag
 			}
 			if token.Type.String() == "CHAR" && token.Value == "." && i+1 > len(tokens) {
 				class := tokens[i+1].Value
-				selectors[selector_index].classes = append(selectors[selector_index].classes, class)
+				selectors[rule_index][selector_index].classes = append(selectors[rule_index][selector_index].classes, class)
+				//selectors[selector_index].classes = append(selectors[selector_index].classes, class)
 			}
 			if token.Type.String() == "HASH" {
 				id := strings.TrimPrefix(token.Value, "#")
-				selectors[selector_index].id = id
+				selectors[rule_index][selector_index].id = id
+				//selectors[selector_index].id = id
 			}
 		}
-		fmt.Println(selectors)
 	}
+	fmt.Println(selectors)
+	return style
 
 }
 
@@ -469,7 +498,6 @@ func main() {
 	// Render the template with data
 	props := map[string]any{"name": "John", "age": 22}
 	markup, script, style := Render("views/home.html", props)
-	scopedCSS(style)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
 	os.WriteFile("./public/index.html", []byte(markup), fs.ModePerm)
