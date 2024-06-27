@@ -1,47 +1,44 @@
 ---
 import Age from "./views/age.html";
+import Head from "./views/head.html";
 
 prop name;
 prop age;
 prop test = "whatever";
 
-//var salutation = "hola";
-var salutation;
+var salutation = "hola";
+//var salutation;
 ---
 
 <!DOCTYPE html>
 <html lang="en">
-	<head>
-		<title>Test</title>
-		<script defer type="text/javascript" src="/script.js"></script>
-		<link rel="stylesheet" href="style.css">
-	</head>
+	<Head />
 	<body>
 		<main>
-		<h1>{salutation} {name}</h1>
-		<span>{test}</span>
-		<div>Random div</div>
-		{if name === "John"}
-			<div id="praise">John is great</div>
-		{else}
-			<div>Not sure who you are, but you're probably great</div>
-		{/if}
-		{if age > 0}
-			<Age {name} {age} />
-		{/if}
-		{for let animal of ["cat", "dog", "whale"]}
-			<div>{name} likes: {animal}s</div>
-		{/for}
+			<h1>{salutation} {name}</h1>
+			<span>{test}</span>
+			<div>Random div</div>
+			{if name === "John"}
+				<div id="praise">John is great</div>
+			{else}
+				<div id="praise">Not sure who you are, but you're probably great</div>
+			{/if}
+			{if age > 0}
+				<Age {name} {age} />
+			{/if}
+			{for let animal of ["cat", "dog", "whale"]}
+				<div>{name} likes: {animal}s</div>
+			{/for}
 		</main>
 	</body>
 </html>
 
 <style>
-	body #praise {
-		font-size: 3rem;
-	}
 	h1 {
 		color: yellow;
+	}
+	body #praise {
+		font-size: 3rem;
 	}
 	span {
 		color: purple;

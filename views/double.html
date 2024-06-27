@@ -11,12 +11,20 @@ age = age * 2;
 	})
 </script>
 
-<div class="double">Double age is: {age}</div>
+<div class="container">
+	<div class="double">Double age is: {age}</div>
 
-{if age > 40}
-	<div>Over the hill</div>
-{else if age > 21}
-	<div>Can drink</div>
-{else}
-	<div>Just a baby</div>
-{/if}
+	{if age > 40}
+		<div>Over the hill</div>
+	{else if age > 21}
+		<div>Can drink</div>
+	{else}
+		<div>Just a baby</div>
+	{/if}
+</div>
+
+<style>
+	.container {
+		background-color: darkgray;
+	}
+</style>

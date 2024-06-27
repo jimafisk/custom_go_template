@@ -10,24 +10,29 @@ prop age;
 	d.style.border = "1px solid red";
 </script>
 
-<div>{name}'s age is: {age}</div>
+<div class="container">
+	<div>{name}'s age is: {age}</div>
 
-{if age > 200}
-	<div class="dead">Dead</div>
-{else if age > 80}
-	<div class="old">Well done</div>
-{else if age > 40}
-	<div class="mid">Over the hill</div>
-{else if age > 21}
-	<div class="young">Can drink</div>
-{else}
-	<div class="new">Just a baby</div>
-{/if}
+	{if age > 200}
+		<div class="dead">Dead</div>
+	{else if age > 80}
+		<div class="old">Well done</div>
+	{else if age > 40}
+		<div class="mid">Over the hill</div>
+	{else if age > 21}
+		<div class="young">Can drink</div>
+	{else}
+		<div class="new">Just a baby</div>
+	{/if}
 
-<Double {age} />
+	<Double {age} />
+</div>
 
 <style>
-	div {
+	.container {
+		background-color: gray;
+	}
+	div > div {
 		font-size: 2rem;
 	}
 	div.dead {

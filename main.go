@@ -547,7 +547,7 @@ func anyToString(value any) string {
 
 func main() {
 	// Render the template with data
-	props := map[string]any{"name": "John", "age": 22}
+	props := map[string]any{"name": "John", "age": 2}
 	markup, script, style := Render("views/home.html", props)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
