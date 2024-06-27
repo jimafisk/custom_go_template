@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
+	"golang.org/x/net/html/atom"
 
 	"github.com/dop251/goja"
 	"github.com/tdewolff/parse/v2"
@@ -78,6 +79,50 @@ type scopedElement struct {
 func scopeHTML(markup string) (string, []scopedElement) {
 	scopedElements := []scopedElement{}
 	node, _ := html.Parse(strings.NewReader(markup))
+
+	node, scopedElements = traverse(node, scopedElements)
+
+	// Render the modified HTML back to a string
+	buf := &strings.Builder{}
+	err := html.Render(buf, node)
+	if err != nil {
+		log.Fatal(err)
+	}
+	markup = html.UnescapeString(buf.String())
+
+	return markup, scopedElements
+}
+
+func scopeHTMLComp(comp_markup string) (string, []scopedElement) {
+	scopedElements := []scopedElement{}
+	fragments := []string{}
+	nodes, _ := html.ParseFragment(strings.NewReader(comp_markup), &html.Node{
+		Type:     html.ElementNode,
+		Data:     "body",
+		DataAtom: atom.Body,
+	})
+	for _, node := range nodes {
+		node, scopedElements = traverse(node, scopedElements)
+
+		// Render the modified HTML back to a string
+		buf := &strings.Builder{}
+		err := html.Render(buf, node)
+		if err != nil {
+			log.Fatal(err)
+		}
+		//markup = html.UnescapeString(buf.String())
+		fragments = append(fragments, html.UnescapeString(buf.String()))
+	}
+	//markup = html.UnescapeString(buf.String())
+	comp_markup = ""
+	for _, f := range fragments {
+		comp_markup = comp_markup + f
+	}
+
+	return comp_markup, scopedElements
+}
+
+func traverse(node *html.Node, scopedElements []scopedElement) (*html.Node, []scopedElement) {
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
 		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
@@ -130,15 +175,7 @@ func scopeHTML(markup string) (string, []scopedElement) {
 	}
 	traverse(node)
 
-	// Render the modified HTML back to a string
-	buf := &strings.Builder{}
-	err := html.Render(buf, node)
-	if err != nil {
-		log.Fatal(err)
-	}
-	markup = html.UnescapeString(buf.String())
-
-	return markup, scopedElements
+	return node, scopedElements
 }
 
 type css_selectors struct {
@@ -473,7 +510,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 				}
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
-				comp_markup, comp_scopedElements := scopeHTML(comp_markup)
+				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup)
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
