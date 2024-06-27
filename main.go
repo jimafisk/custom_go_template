@@ -155,7 +155,11 @@ func scopeHTML(markup string) (string, []scopedElement) {
 	return markup, scopedElements
 }
 
-type selector struct {
+type css_selectors struct {
+	selectorStr string
+	selectorArr []css_selector
+}
+type css_selector struct {
 	tag     string
 	classes []string
 	id      string
@@ -164,18 +168,21 @@ type selector struct {
 func scopeCSS(style string, scopedElements []scopedElement) string {
 	ss := css.Parse(style)
 	rules := ss.GetCSSRuleList()
-	selectors := [][]selector{}
+	selectors := []css_selectors{}
 	for rule_index, rule := range rules {
 		tokens := rule.Style.Selector.Tokens
 		selectorStr := rule.Style.Selector.Text()
-		selectors = append(selectors, []selector{{}})
+		selectors = append(selectors, css_selectors{
+			selectorStr: selectorStr,
+			selectorArr: []css_selector{{}},
+		})
 		//fmt.Println("\nNEW SELECTOR")
 		selector_index := 0
 		for i, token := range tokens {
 			if token.Type.String() == "S" && i+1 != len(tokens) {
 				// Space indicates a nested selector
 				selector_index++
-				selectors[rule_index] = append(selectors[rule_index], selector{})
+				selectors[rule_index].selectorArr = append(selectors[rule_index].selectorArr, css_selector{})
 				//selectors = append(selectors, selector{})
 			}
 			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
@@ -186,17 +193,17 @@ func scopeCSS(style string, scopedElements []scopedElement) string {
 						continue
 					}
 				}
-				selectors[rule_index][selector_index].tag = tag
+				selectors[rule_index].selectorArr[selector_index].tag = tag
 				//selectors[selector_index].tag = tag
 			}
-			if token.Type.String() == "CHAR" && token.Value == "." && i+1 > len(tokens) {
+			if token.Type.String() == "CHAR" && token.Value == "." && i+1 < len(tokens) {
 				class := tokens[i+1].Value
-				selectors[rule_index][selector_index].classes = append(selectors[rule_index][selector_index].classes, class)
+				selectors[rule_index].selectorArr[selector_index].classes = append(selectors[rule_index].selectorArr[selector_index].classes, class)
 				//selectors[selector_index].classes = append(selectors[selector_index].classes, class)
 			}
 			if token.Type.String() == "HASH" {
 				id := strings.TrimPrefix(token.Value, "#")
-				selectors[rule_index][selector_index].id = id
+				selectors[rule_index].selectorArr[selector_index].id = id
 				//selectors[selector_index].id = id
 			}
 		}
