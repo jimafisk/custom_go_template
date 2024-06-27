@@ -57,7 +57,7 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Create scoped classes and add to html
 	markup, scopedElements := scopeHTML(markup)
 	// Add scoped classes to css
-	style = scopeCSS(style, scopedElements)
+	style, _ = scopeCSS(style, scopedElements)
 
 	ast, err := js.Parse(parse.NewInputString(script), js.Options{})
 	if err != nil {
@@ -78,18 +78,9 @@ type scopedElement struct {
 func scopeHTML(markup string) (string, []scopedElement) {
 	scopedElements := []scopedElement{}
 	node, _ := html.Parse(strings.NewReader(markup))
-	/*
-		// https://nikodoko.com/posts/html-table-parsing/
-		nodes, _ := html.ParseFragment(strings.NewReader(markup), &html.Node{})
-		nodes, _ := html.ParseFragment(strings.NewReader(markup), &html.Node{
-			Type:     html.ElementNode,
-			Data:     "body",
-			DataAtom: atom.Body},
-		)
-	*/
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
-		if node.Type == html.ElementNode {
+		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
 			tag := node.Data
 			id := ""
 			classes := []string{}
@@ -138,11 +129,6 @@ func scopeHTML(markup string) (string, []scopedElement) {
 		}
 	}
 	traverse(node)
-	/*
-		for _, node := range nodes {
-			traverse(node)
-		}
-	*/
 
 	// Render the modified HTML back to a string
 	buf := &strings.Builder{}
@@ -165,7 +151,8 @@ type css_selector struct {
 	id      string
 }
 
-func scopeCSS(style string, scopedElements []scopedElement) string {
+func scopeCSS(style string, scopedElements []scopedElement) (string, []css_selectors) {
+	fmt.Println(scopedElements)
 	ss := css.Parse(style)
 	rules := ss.GetCSSRuleList()
 	selectors := []css_selectors{}
@@ -176,40 +163,42 @@ func scopeCSS(style string, scopedElements []scopedElement) string {
 			selectorStr: selectorStr,
 			selectorArr: []css_selector{{}},
 		})
-		//fmt.Println("\nNEW SELECTOR")
 		selector_index := 0
 		for i, token := range tokens {
 			if token.Type.String() == "S" && i+1 != len(tokens) {
 				// Space indicates a nested selector
 				selector_index++
 				selectors[rule_index].selectorArr = append(selectors[rule_index].selectorArr, css_selector{})
-				//selectors = append(selectors, selector{})
 			}
 			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
 				tag := token.Value
+				selectors[rule_index].selectorArr[selector_index].tag = tag
 				for _, e := range scopedElements {
-					if e.tag == tag {
+					fmt.Println(selectorStr + "." + e.scopedClass)
+					//if e.tag == tag && !strings.Contains(style, selectorStr+"."+e.scopedClass) {
+					//if e.tag == tag && !strings.Contains(style, tag+"."+e.scopedClass) {
+					//if e.tag == tag && !strings.Contains(style, selectorStr+".plenti-") {
+					if e.tag == tag && !strings.Contains(style, tag+".plenti-") {
 						style = strings.ReplaceAll(style, selectorStr, selectorStr+"."+e.scopedClass)
+						//style = strings.ReplaceAll(style, tag, tag+"."+e.scopedClass)
 						continue
 					}
 				}
-				selectors[rule_index].selectorArr[selector_index].tag = tag
-				//selectors[selector_index].tag = tag
 			}
 			if token.Type.String() == "CHAR" && token.Value == "." && i+1 < len(tokens) {
 				class := tokens[i+1].Value
 				selectors[rule_index].selectorArr[selector_index].classes = append(selectors[rule_index].selectorArr[selector_index].classes, class)
-				//selectors[selector_index].classes = append(selectors[selector_index].classes, class)
 			}
 			if token.Type.String() == "HASH" {
 				id := strings.TrimPrefix(token.Value, "#")
 				selectors[rule_index].selectorArr[selector_index].id = id
-				//selectors[selector_index].id = id
 			}
 		}
 	}
-	fmt.Println(selectors)
-	return style
+
+	// The `selectors` var isn't currently used, but could be useful for removing unused styles
+	// or only setting classes in HTML if the selector exists in CSS
+	return style, selectors
 
 }
 
@@ -475,6 +464,11 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 					comp_props[prop_name] = prop_value
 				}
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
+				// Create scoped classes and add to html
+				comp_markup, comp_scopedElements := scopeHTML(comp_markup)
+				// Add scoped classes to css
+				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
+
 				markup = reComponent.ReplaceAllString(markup, comp_markup)
 				script = script + comp_script
 				style = style + comp_style
