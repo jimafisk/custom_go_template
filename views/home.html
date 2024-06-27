@@ -17,6 +17,7 @@ var salutation;
 		<link rel="stylesheet" href="style.css">
 	</head>
 	<body>
+		<main>
 		<h1>{salutation} {name}</h1>
 		<span>{test}</span>
 		<div>Random div</div>
@@ -31,11 +32,12 @@ var salutation;
 		{for let animal of ["cat", "dog", "whale"]}
 			<div>{name} likes: {animal}s</div>
 		{/for}
+		</main>
 	</body>
 </html>
 
 <style>
-	body #praise {
+	main #praise {
 		font-size: 3rem;
 	}
 	h1 {

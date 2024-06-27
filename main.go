@@ -152,7 +152,6 @@ type css_selector struct {
 }
 
 func scopeCSS(style string, scopedElements []scopedElement) (string, []css_selectors) {
-	fmt.Println(scopedElements)
 	ss := css.Parse(style)
 	rules := ss.GetCSSRuleList()
 	selectors := []css_selectors{}
@@ -174,13 +173,8 @@ func scopeCSS(style string, scopedElements []scopedElement) (string, []css_selec
 				tag := token.Value
 				selectors[rule_index].selectorArr[selector_index].tag = tag
 				for _, e := range scopedElements {
-					fmt.Println(selectorStr + "." + e.scopedClass)
-					//if e.tag == tag && !strings.Contains(style, selectorStr+"."+e.scopedClass) {
-					//if e.tag == tag && !strings.Contains(style, tag+"."+e.scopedClass) {
-					//if e.tag == tag && !strings.Contains(style, selectorStr+".plenti-") {
 					if e.tag == tag && !strings.Contains(style, tag+".plenti-") {
-						style = strings.ReplaceAll(style, selectorStr, selectorStr+"."+e.scopedClass)
-						//style = strings.ReplaceAll(style, tag, tag+"."+e.scopedClass)
+						style = strings.ReplaceAll(style, tag, tag+"."+e.scopedClass)
 						continue
 					}
 				}
@@ -188,9 +182,23 @@ func scopeCSS(style string, scopedElements []scopedElement) (string, []css_selec
 			if token.Type.String() == "CHAR" && token.Value == "." && i+1 < len(tokens) {
 				class := tokens[i+1].Value
 				selectors[rule_index].selectorArr[selector_index].classes = append(selectors[rule_index].selectorArr[selector_index].classes, class)
+				for _, e := range scopedElements {
+					for _, c := range e.classes {
+						if c == class && !strings.Contains(style, class+".plenti-") && !strings.HasPrefix(class, "plenti-") {
+							style = strings.ReplaceAll(style, class, class+"."+e.scopedClass)
+							continue
+						}
+					}
+				}
 			}
 			if token.Type.String() == "HASH" {
 				id := strings.TrimPrefix(token.Value, "#")
+				for _, e := range scopedElements {
+					if e.id == id && !strings.Contains(style, id+".plenti-") {
+						style = strings.ReplaceAll(style, id, id+"."+e.scopedClass)
+						continue
+					}
+				}
 				selectors[rule_index].selectorArr[selector_index].id = id
 			}
 		}
