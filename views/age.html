@@ -3,6 +3,8 @@ import Double from "./views/double.html";
 
 prop name;
 prop age;
+
+let path = "./views/mycomp.html";
 ---
 
 <script>
@@ -13,7 +15,6 @@ prop age;
 	fetch('https://jsonplaceholder.typicode.com/todos')
 		.then(response => response.json())
 		.then(json => {
-			console.log(json);
 			t.innerHTML = json.slice(0, 8).map(todo => "<tr><td>" + todo.title + "</td><td>" + todo.completed + "</td></tr>").join('');
 		})
 </script>
@@ -34,6 +35,9 @@ prop age;
 	{/if}
 
 	<Double {age} />
+	<="./views/mycomp.html" {age} />
+	<={path} />
+	<="./views/mycomp.html" {age} />
 </div>
 
 <table>

@@ -525,6 +525,51 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			}
 		}
 	}
+	// Handle dynamic components
+	// reDynamicComponent := regexp.MustCompile(`<=(.*?)\s({.*?})?(?:\s)?/>`)
+	reDynamicComponent := regexp.MustCompile(`<=(".*?"|'.*?'|{.*?})\s({.*?})?(?:\s)?/>`)
+	matches := reDynamicComponent.FindAllStringSubmatch(markup, -1)
+	for _, match := range matches {
+		if len(match) >= 1 {
+			var comp_path string
+			wrapped_comp_path := match[1]
+			if strings.HasPrefix(wrapped_comp_path, `"`) && strings.HasSuffix(wrapped_comp_path, `"`) {
+				comp_path = strings.Trim(wrapped_comp_path, `"`)
+			}
+			if strings.HasPrefix(wrapped_comp_path, `'`) && strings.HasSuffix(wrapped_comp_path, `'`) {
+				comp_path = strings.Trim(wrapped_comp_path, `'`)
+			}
+			if strings.HasPrefix(wrapped_comp_path, `{`) && strings.HasSuffix(wrapped_comp_path, `}`) {
+				comp_path_var := strings.Trim(wrapped_comp_path, "{}")
+				wrapped_path := anyToString(props[comp_path_var])
+				comp_path = strings.Trim(wrapped_path, `'`) // TODO: Should anyToString be wrapping value in single quotes?
+			}
+			comp_props := map[string]any{}
+			if len(match) >= 2 && match[2] != "" {
+				comp_props_str := match[2]
+				prop_names := strings.Split(comp_props_str, " ")
+				for _, wrapped_prop_name := range prop_names {
+					prop_name := strings.Trim(wrapped_prop_name, "{}")
+					comp_props[prop_name] = props[prop_name]
+				}
+			}
+			comp_markup, comp_script, comp_style := Render(comp_path, comp_props)
+			// Create scoped classes and add to html
+			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup)
+			// Add scoped classes to css
+			comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
+
+			//markup = reDynamicComponent.ReplaceAllString.Replace(markup, comp_markup)
+			// Replace one string
+			found := reDynamicComponent.FindString(markup)
+			if found != "" {
+				markup = strings.Replace(markup, found, comp_markup, 1)
+			}
+			script = script + comp_script
+			style = style + comp_style
+		}
+	}
+
 	return markup, script, style
 }
 
