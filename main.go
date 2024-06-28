@@ -503,7 +503,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 	for _, component := range components {
 		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
 		matches := reComponent.FindAllStringSubmatch(markup, -1)
-		for _, match := range matches {
+		for i, match := range matches {
 			if len(match) > 1 {
 				comp_props := map[string]any{}
 				reProp := regexp.MustCompile(`{(.*?)}`)
@@ -519,8 +519,16 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
-				markup = reComponent.ReplaceAllString(markup, comp_markup)
-				script = script + comp_script
+				//markup = reComponent.ReplaceAllString(markup, comp_markup)
+				found := reComponent.FindString(markup)
+				if found != "" {
+					markup = strings.Replace(markup, found, comp_markup, 1)
+				}
+				if i < 1 {
+					// Temp don't re-add script for comps already used
+					// TODO: Need to scope JS vars to each comp
+					script = script + comp_script
+				}
 				style = style + comp_style
 			}
 		}
