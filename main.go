@@ -446,7 +446,7 @@ func renderLoops(markup string, props map[string]any) string {
 				if !ok {
 					collection_value = collection
 				}
-				items := evaluateLoop(anyToString(collection_value))
+				items := evaluateLoop(fmt.Sprintf("%v", collection_value)) // like anyToString() but doesn't wrap in quotes
 				for _, value := range items {
 					reLoopVar := regexp.MustCompile(`{` + iterator + `}`)
 					evaluated_result := reLoopVar.ReplaceAllString(result, value)
@@ -499,7 +499,7 @@ func getComponents(fence string) (string, []Component) {
 }
 
 func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
-	// Recursively render imports
+	// Handle staticly imported components
 	for _, component := range components {
 		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
 		matches := reComponent.FindAllStringSubmatch(markup, -1)
@@ -513,13 +513,14 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 					prop_value := props[prop_name]
 					comp_props[prop_name] = prop_value
 				}
+				// Recursively render imports
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
 				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup)
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
-				//markup = reComponent.ReplaceAllString(markup, comp_markup)
+				// Replace only one component (in case multiple of the same comps are placed on the page)
 				found := reComponent.FindString(markup)
 				if found != "" {
 					markup = strings.Replace(markup, found, comp_markup, 1)
@@ -534,7 +535,6 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		}
 	}
 	// Handle dynamic components
-	// reDynamicComponent := regexp.MustCompile(`<=(.*?)\s({.*?})?(?:\s)?/>`)
 	reDynamicComponent := regexp.MustCompile(`<=(".*?"|'.*?'|{.*?})\s({.*?})?(?:\s)?/>`)
 	matches := reDynamicComponent.FindAllStringSubmatch(markup, -1)
 	for _, match := range matches {
@@ -549,8 +549,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			}
 			if strings.HasPrefix(wrapped_comp_path, `{`) && strings.HasSuffix(wrapped_comp_path, `}`) {
 				comp_path_var := strings.Trim(wrapped_comp_path, "{}")
-				wrapped_path := anyToString(props[comp_path_var])
-				comp_path = strings.Trim(wrapped_path, `'`) // TODO: Should anyToString be wrapping value in single quotes?
+				comp_path = fmt.Sprintf("%v", props[comp_path_var]) // Converts any to string, but doesn't wrap in quotes like anyToString()
 			}
 			comp_props := map[string]any{}
 			if len(match) >= 2 && match[2] != "" {
@@ -567,7 +566,6 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			// Add scoped classes to css
 			comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
-			//markup = reDynamicComponent.ReplaceAllString.Replace(markup, comp_markup)
 			// Replace one string
 			found := reDynamicComponent.FindString(markup)
 			if found != "" {
@@ -584,10 +582,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 func anyToString(value any) string {
 	switch value := value.(type) {
 	case string:
-		if strings.HasPrefix(value, "[") && strings.HasSuffix(value, "]") {
-			return value
-		}
-		return "'" + value + "'"
+		return "`" + value + "`"
 	case int:
 		return strconv.Itoa(value)
 	case int64:
