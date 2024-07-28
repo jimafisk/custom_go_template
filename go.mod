@@ -4,7 +4,7 @@ go 1.22.2
 
 require (
 	github.com/dop251/goja v0.0.0-20240516125602-ccbae20bcec2
-	github.com/tdewolff/parse/v2 v2.7.14
+	github.com/tdewolff/parse/v2 v2.7.15
 	golang.org/x/net v0.26.0
 )
 
