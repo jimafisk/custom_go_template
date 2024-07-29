@@ -258,61 +258,20 @@ func (*visitor) Exit(js.INode) {}
 func (v *visitor) Enter(node js.INode) js.IVisitor {
 	switch node := node.(type) {
 	case *js.Var:
-		if node.Decl.String() == "LexicalDecl" {
+		if node.Decl.String() == "LexicalDecl" && !strings.Contains(node.String(), "_plenti_") {
 			randomStr, _ := generateRandom()
-			node.Data = append(node.Data, []byte("_"+randomStr)...)
-			//fmt.Println(string(node.Data))
-			fmt.Println(node.String())
-			//fmt.Println(node.Info())
+			node.Data = append(node.Data, []byte("_plenti_"+randomStr)...)
 		}
-		//node.Link = node.Link.String() + randomStr
 	}
 	return v
 }
 
 func scopeJS(script string, scopedElements []scopedElement) string {
-	//fmt.Println("ScopedEls:")
-	//fmt.Println(scopedElements)
-	//ast, _ := js.NewParser(parse.NewInputString(script))
 	ast, _ := js.Parse(parse.NewInputString(script), js.Options{})
-	//fmt.Println(ast.VarDecls)
-	//fmt.Println(ast.BlockStmt)
-	//fmt.Println("AST:")
-	//fmt.Println(ast.Declared)
-	var v js.IVisitor = &visitor{}
-	//fmt.Println(v)
-	//v := visitor{}
-	js.Walk(v, ast)
-	//fmt.Println("BLOCK:")
-	//fmt.Println(ast.BlockStmt)
-	/*
-		js_vars := ast.Declared
-		for i, js_var := range js_vars {
-			fmt.Println(i)
-			fmt.Println(js_var)
-		}
-	*/
-
-	//fmt.Println(ast)
+	v := visitor{}
+	js.Walk(&v, ast)
+	script = ast.JSString()
 	return script
-	l := js.NewLexer(parse.NewInputString(script))
-	for {
-		tt, text := l.Next()
-		switch tt {
-		case js.ErrorToken:
-			if l.Err() != io.EOF {
-				fmt.Println("Error:", l.Err())
-			}
-			return script
-		case js.VarToken:
-			fmt.Println("Var", string(text))
-		case js.IdentifierToken:
-			fmt.Println("Identifier", string(text))
-		case js.NumericToken:
-			fmt.Println("Numeric", string(text))
-			// ...
-		}
-	}
 }
 
 func getTagScopedClass(tag string, scopedElements []scopedElement) string {
