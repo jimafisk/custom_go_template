@@ -252,9 +252,12 @@ func scopeCSS(style string, scopedElements []scopedElement) (string, []css_selec
 
 }
 
-type visitor struct{}
+type visitor struct {
+	scopedElements []scopedElement
+}
 
 func (*visitor) Exit(js.INode) {}
+
 func (v *visitor) Enter(node js.INode) js.IVisitor {
 	switch node := node.(type) {
 	case *js.Var:
@@ -262,13 +265,32 @@ func (v *visitor) Enter(node js.INode) js.IVisitor {
 			randomStr, _ := generateRandom()
 			node.Data = append(node.Data, []byte("_plenti_"+randomStr)...)
 		}
+		/*
+			if node.Decl.String() == "NoDecl" && string(node.Name()) == "document" {
+			}
+			fmt.Println(node.Decl.String())
+			fmt.Println(string(node.Name()))
+			fmt.Println(string(node.Data))
+		*/
+	case *js.VarDecl:
+		if !strings.Contains(node.String(), "_plenti_") {
+			fmt.Println(node.TokenType)
+			fmt.Println(node.List[0])
+			fmt.Println(node.List[0].Binding)
+			fmt.Println(node.List[0].Default)
+		}
+	case *js.Element:
+		fmt.Println(node.Value.String())
+	default:
+		//fmt.Println()
+		//fmt.Println(node.String())
 	}
 	return v
 }
 
 func scopeJS(script string, scopedElements []scopedElement) string {
 	ast, _ := js.Parse(parse.NewInputString(script), js.Options{})
-	v := visitor{}
+	v := visitor{scopedElements: scopedElements}
 	js.Walk(&v, ast)
 	script = ast.JSString()
 	return script
