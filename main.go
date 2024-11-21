@@ -134,7 +134,7 @@ func traverse(node *html.Node, scopedElements []scopedElement) (*html.Node, []sc
 			tag := node.Data
 			id := ""
 			classes := []string{}
-			scopedClass := getTagScopedClass(tag, scopedElements)
+			scopedClass := getScopedClass(tag, "tag", scopedElements)
 
 			if scopedClass == "" {
 				// There wasn't an existing scoped class for the element, so create one
@@ -273,22 +273,24 @@ func (v *visitor) Enter(node js.INode) js.IVisitor {
 					objName := string(memberExpr.X.String())
 					propName := string(memberExpr.Y.Data)
 					if objName == "document" && propName == "querySelector" {
-						// Handle querySelector call
-						// You can also get the arguments:
 						for i, arg := range callExpr.Args.List {
-							fmt.Println(arg)
+							argStrOrig := strings.Trim(arg.String(), "\"")
+							argStr := argStrOrig
+							target_type := "tag"
+							if strings.HasPrefix(argStr, ".") {
+								argStr = strings.TrimPrefix(argStr, ".")
+								target_type = "class"
+							}
+							if strings.HasPrefix(argStr, "#") {
+								argStr = strings.TrimPrefix(argStr, "#")
+								target_type = "id"
+							}
+							scopedClass := getScopedClass(argStr, target_type, v.scopedElements)
+							fmt.Println(argStr)
 							callExpr.Args.List[i] = js.Arg{Value: &js.LiteralExpr{
-								Data: []byte("test"),
+								Data: []byte(`"` + argStrOrig + "." + scopedClass + `"`),
 							}}
 						}
-						/*
-							if len(callExpr.Args.List) > 0 {
-								if arg, ok := callExpr.Args[0].(*js.LiteralExpr); ok {
-									selector := string(arg.Data)
-									fmt.Printf("Found querySelector with selector: %s\n", selector)
-								}
-							}
-						*/
 					}
 				}
 			}
@@ -311,10 +313,26 @@ func scopeJS(script string, scopedElements []scopedElement) string {
 	return script
 }
 
-func getTagScopedClass(tag string, scopedElements []scopedElement) string {
+func getScopedClass(target string, target_type string, scopedElements []scopedElement) string {
 	for _, elem := range scopedElements {
-		if elem.tag == tag {
+		if target_type == "tag" && elem.tag == target {
+			fmt.Println("tag found: " + target)
+			fmt.Println("Scoped Class: " + elem.scopedClass)
 			return elem.scopedClass
+		}
+		if target_type == "id" && elem.id == target {
+			fmt.Println("ID found: " + target)
+			fmt.Println("Scoped Class: " + elem.scopedClass)
+			return elem.scopedClass
+		}
+		if target_type == "class" {
+			for _, class := range elem.classes {
+				if class == target {
+					fmt.Println("Class found: " + target)
+					fmt.Println("Scoped Class: " + elem.scopedClass)
+					return elem.scopedClass
+				}
+			}
 		}
 	}
 	return ""
