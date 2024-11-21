@@ -155,6 +155,7 @@ func traverse(node *html.Node, scopedElements []scopedElement) (*html.Node, []sc
 					for _, class := range classes {
 						if strings.HasPrefix(class, "plenti-") {
 							alreadyScoped = true
+							scopedClass = class
 						}
 					}
 					if !alreadyScoped {
@@ -306,6 +307,10 @@ func (v *visitor) Enter(node js.INode) js.IVisitor {
 }
 
 func scopeJS(script string, scopedElements []scopedElement) string {
+	fmt.Println(scopedElements)
+	fmt.Println()
+	fmt.Println()
+	fmt.Println()
 	ast, _ := js.Parse(parse.NewInputString(script), js.Options{})
 	v := visitor{scopedElements: scopedElements}
 	js.Walk(&v, ast)
