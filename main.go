@@ -265,54 +265,30 @@ func (v *visitor) Enter(node js.INode) js.IVisitor {
 			randomStr, _ := generateRandom()
 			node.Data = append(node.Data, []byte("_plenti_"+randomStr)...)
 		}
-		/*
-			if node.Decl.String() == "NoDecl" && string(node.Name()) == "document" {
-			}
-			fmt.Println(node.Decl.String())
-			fmt.Println(string(node.Name()))
-			fmt.Println(string(node.Data))
-		*/
-	case *js.VarDecl:
-		/*
-			if !strings.Contains(node.String(), "_plenti_") {
-				fmt.Println(node.TokenType)
-				fmt.Println(node.List[0])
-				fmt.Println(node.List[0].Binding)
-				fmt.Println(node.List[0].Default)
-			}
-		*/
 	case *js.BindingElement:
-		//fmt.Println(node.Binding)
-		//fmt.Println(node.Default)
 		if expr := node.Default; expr != nil {
 			if callExpr, ok := expr.(*js.CallExpr); ok {
 				// Check if it's a member expression (like document.querySelector)
-				//if memberExpr, ok := callExpr.X.(*js.MemberExpr); ok {
 				if memberExpr, ok := callExpr.X.(*js.DotExpr); ok {
 					objName := string(memberExpr.X.String())
 					propName := string(memberExpr.Y.Data)
-					fmt.Println("Object: " + objName)
-					fmt.Println("Prop: " + propName)
-					// Get the object (document) and property (querySelector)
-					if obj, ok := memberExpr.X.(*js.Var); ok {
-						objName := string(obj.Data)
-						//propName := string(memberExpr.Y.(*js.Var).Data)
-						propName := string(memberExpr.X.(*js.Var).Data)
-						//fmt.Println(objName)
-						//fmt.Println(propName)
-
-						if objName == "document" && propName == "querySelector" {
-							// Handle querySelector call
-							// You can also get the arguments:
-							/*
-								if len(callExpr.Args) > 0 {
-									if arg, ok := callExpr.Args[0].(*js.LiteralExpr); ok {
-										selector := string(arg.Data)
-										fmt.Printf("Found querySelector with selector: %s\n", selector)
-									}
-								}
-							*/
+					if objName == "document" && propName == "querySelector" {
+						// Handle querySelector call
+						// You can also get the arguments:
+						for i, arg := range callExpr.Args.List {
+							fmt.Println(arg)
+							callExpr.Args.List[i] = js.Arg{Value: &js.LiteralExpr{
+								Data: []byte("test"),
+							}}
 						}
+						/*
+							if len(callExpr.Args.List) > 0 {
+								if arg, ok := callExpr.Args[0].(*js.LiteralExpr); ok {
+									selector := string(arg.Data)
+									fmt.Printf("Found querySelector with selector: %s\n", selector)
+								}
+							}
+						*/
 					}
 				}
 			}
