@@ -581,22 +581,26 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		for _, match := range matches {
 			if len(match) > 1 {
 				comp_props := map[string]any{}
-				reProp := regexp.MustCompile(`{(.*?)}`)
-				wrapped_props := reProp.FindAllStringSubmatch(match[1], -1)
-				for _, wrapped_prop := range wrapped_props {
-					prop_name := wrapped_prop[1]
-					prop_value := props[prop_name]
-					comp_props[prop_name] = prop_value
-				}
-				//reEvaluatedProp := regexp.MustCompile(`([a-zA-Z_$][a-zA-Z0-9_$]*)={([^}]*)}`)
-				reEvaluatedProp := regexp.MustCompile(`([a-zA-Z_$][a-zA-Z0-9_$]*)=\{(.*)\}`) // TODO: Can't eval {5} because repetition operator
-				eval_prop_matches := reEvaluatedProp.FindAllStringSubmatch(match[1], -1)
-				for _, eval_prop_match := range eval_prop_matches {
-					prop_name := eval_prop_match[1]
-					vm := goja.New()
-					goja_value, _ := vm.RunString(eval_prop_match[2])
-					prop_value := goja_value.Export()
-					comp_props[prop_name] = prop_value
+				comp_args := strings.SplitAfter(match[1], "}")
+				for _, comp_arg := range comp_args {
+					comp_arg = strings.TrimSpace(comp_arg)
+					if strings.HasPrefix(comp_arg, "{") && strings.HasSuffix(comp_arg, "}") {
+						prop_name := strings.Trim(comp_arg, "{}")
+						prop_value := props[prop_name]
+						comp_props[prop_name] = prop_value
+					}
+					if strings.Contains(comp_arg, "={") && strings.HasSuffix(comp_arg, "}") {
+						nameEndPos := strings.IndexRune(comp_arg, '=')
+						prop_name := comp_arg[0:nameEndPos]
+
+						vm := goja.New()
+						valueStartPos := strings.IndexRune(comp_arg, '{')
+						valueEndPos := strings.IndexRune(comp_arg, '}')
+						goja_value, _ := vm.RunString(comp_arg[valueStartPos+1 : valueEndPos])
+						prop_value := goja_value.Export()
+
+						comp_props[prop_name] = prop_value
+					}
 				}
 				// Recursively render imports
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
