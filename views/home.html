@@ -1,6 +1,7 @@
 ---
 import Age from "./views/age.html";
 import Head from "./views/head.html";
+import Todos from "./views/todos.html";
 
 prop name;
 prop age;
@@ -24,13 +25,20 @@ var salutation = "hola";
 				<div id="praise">Not sure who you are, but you're probably great</div>
 			{/if}
 			{if age > 0}
-				<Age {name} {age} number={5 + 5} />
-				<Age {name} {age} number={3} />
-				<Age {name} {age} number={7 - 1} />
+				<Age {name} {age} />
+				<Todos number={5 + 5} />
+
+				<Age {name} {age} />
+				<Todos number={14} />
+
+				<Age {name} {age} />
+				<Todos number={7 - 2} />
 			{/if}
-			{for let animal of ["cat", "dog", "whale"]}
-				<div>{name} likes: {animal}s</div>
-			{/for}
+			<div class="animals">
+				{for let animal of ["cat", "dog", "whale"]}
+					<div>{name} likes: {animal}s</div>
+				{/for}
+			</div>
 		</main>
 	</body>
 </html>
@@ -44,5 +52,9 @@ var salutation = "hola";
 	}
 	span {
 		color: purple;
+	}
+	.animals {
+		background-color: black;
+		color: white;
 	}
 </style>
