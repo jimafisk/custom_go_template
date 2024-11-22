@@ -435,6 +435,16 @@ func evaluateProps(fence string, allVars []string, props map[string]any) map[str
 	return props
 }
 
+func evalJS(jsCode string, props map[string]any) any {
+	prop_decl := ""
+	for prop_name, prop_value := range props {
+		prop_decl += prop_name + " = " + anyToString(prop_value) + ";"
+	}
+	vm := goja.New()
+	goja_value, _ := vm.RunString(prop_decl + jsCode)
+	return goja_value.Export()
+}
+
 func applyProps(markup string, props map[string]any) string {
 	// Replace placeholders with data
 	for name, value := range props {
@@ -593,11 +603,9 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 						nameEndPos := strings.IndexRune(comp_arg, '=')
 						prop_name := comp_arg[0:nameEndPos]
 
-						vm := goja.New()
 						valueStartPos := strings.IndexRune(comp_arg, '{')
 						valueEndPos := strings.IndexRune(comp_arg, '}')
-						goja_value, _ := vm.RunString(comp_arg[valueStartPos+1 : valueEndPos])
-						prop_value := goja_value.Export()
+						prop_value := evalJS(comp_arg[valueStartPos+1:valueEndPos], props)
 
 						comp_props[prop_name] = prop_value
 					}
