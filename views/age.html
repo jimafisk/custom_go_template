@@ -1,8 +1,10 @@
 ---
 import Double from "./views/double.html";
+import Todos from "./views/todos.html";
 
 prop name;
 prop age;
+prop number;
 
 let path = "./views/mycomp.html";
 let text = "something";
@@ -11,14 +13,6 @@ let text = "something";
 <script>
 	let d = document.querySelector("div");
 	d.style.border = "1px solid red";
-
-	let t = document.querySelector(".todos")
-	t.style.border = "1px solid blue";
-	fetch('https://jsonplaceholder.typicode.com/todos')
-		.then(response => response.json())
-		.then(json => {
-			t.innerHTML = json.slice(0, 8).map(todo => "<tr><td>" + todo.title + "</td><td>" + todo.completed + "</td></tr>").join('');
-		})
 </script>
 
 <div class="container">
@@ -43,16 +37,7 @@ let text = "something";
 	<="./views/mycomp.html" {age} />
 </div>
 
-<table>
-	<thead>
-		<tr>
-			<th>Todo</th>
-			<th>Completed</th>
-		</tr>
-	</thead>
-	<tbody class="todos">
-	</tbody>
-</table>
+<Todos {number} />
 
 <style>
 	.container {

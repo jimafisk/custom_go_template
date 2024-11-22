@@ -287,9 +287,12 @@ func (v *visitor) Enter(node js.INode) js.IVisitor {
 								target_type = "id"
 							}
 							scopedClass := getScopedClass(argStr, target_type, v.scopedElements)
-							fmt.Println(argStr)
+							newData := []byte(`"` + argStrOrig + `"`)
+							if !strings.Contains(argStrOrig, "plenti-") {
+								newData = []byte(`"` + argStrOrig + "." + scopedClass + `"`)
+							}
 							callExpr.Args.List[i] = js.Arg{Value: &js.LiteralExpr{
-								Data: []byte(`"` + argStrOrig + "." + scopedClass + `"`),
+								Data: newData,
 							}}
 						}
 					}
@@ -307,10 +310,6 @@ func (v *visitor) Enter(node js.INode) js.IVisitor {
 }
 
 func scopeJS(script string, scopedElements []scopedElement) string {
-	fmt.Println(scopedElements)
-	fmt.Println()
-	fmt.Println()
-	fmt.Println()
 	ast, _ := js.Parse(parse.NewInputString(script), js.Options{})
 	v := visitor{scopedElements: scopedElements}
 	js.Walk(&v, ast)
@@ -321,20 +320,14 @@ func scopeJS(script string, scopedElements []scopedElement) string {
 func getScopedClass(target string, target_type string, scopedElements []scopedElement) string {
 	for _, elem := range scopedElements {
 		if target_type == "tag" && elem.tag == target {
-			fmt.Println("tag found: " + target)
-			fmt.Println("Scoped Class: " + elem.scopedClass)
 			return elem.scopedClass
 		}
 		if target_type == "id" && elem.id == target {
-			fmt.Println("ID found: " + target)
-			fmt.Println("Scoped Class: " + elem.scopedClass)
 			return elem.scopedClass
 		}
 		if target_type == "class" {
 			for _, class := range elem.classes {
 				if class == target {
-					fmt.Println("Class found: " + target)
-					fmt.Println("Scoped Class: " + elem.scopedClass)
 					return elem.scopedClass
 				}
 			}
@@ -593,6 +586,16 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 				for _, wrapped_prop := range wrapped_props {
 					prop_name := wrapped_prop[1]
 					prop_value := props[prop_name]
+					comp_props[prop_name] = prop_value
+				}
+				//reEvaluatedProp := regexp.MustCompile(`([a-zA-Z_$][a-zA-Z0-9_$]*)={([^}]*)}`)
+				reEvaluatedProp := regexp.MustCompile(`([a-zA-Z_$][a-zA-Z0-9_$]*)=\{(.*)\}`) // TODO: Can't eval {5} because repetition operator
+				eval_prop_matches := reEvaluatedProp.FindAllStringSubmatch(match[1], -1)
+				for _, eval_prop_match := range eval_prop_matches {
+					prop_name := eval_prop_match[1]
+					vm := goja.New()
+					goja_value, _ := vm.RunString(eval_prop_match[2])
+					prop_value := goja_value.Export()
 					comp_props[prop_name] = prop_value
 				}
 				// Recursively render imports

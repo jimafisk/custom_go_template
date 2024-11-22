@@ -24,9 +24,9 @@ var salutation = "hola";
 				<div id="praise">Not sure who you are, but you're probably great</div>
 			{/if}
 			{if age > 0}
-				<Age {name} {age} />
-				<Age {name} {age} />
-				<Age {name} {age} />
+				<Age {name} {age} number={5 + 5} />
+				<Age {name} {age} number={2 + 1} />
+				<Age {name} {age} number={7 - 1} />
 			{/if}
 			{for let animal of ["cat", "dog", "whale"]}
 				<div>{name} likes: {animal}s</div>
