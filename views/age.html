@@ -5,6 +5,7 @@ prop name;
 prop age;
 
 let path = "./views/mycomp.html";
+let comp = "mycomp";
 let text = "something";
 ---
 
@@ -32,7 +33,7 @@ let text = "something";
 	<Double {age} {text} />
 	<="./views/mycomp.html" {age} />
 	<={path} />
-	<="./views/mycomp.html" age={age + 1} />
+	<="./views/{comp}.html" age={age + 1} />
 </div>
 
 <style>

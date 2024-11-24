@@ -3,7 +3,6 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
-	"io"
 	"io/fs"
 	"log"
 	"math/big"
@@ -455,7 +454,7 @@ func evalAllBrackets(str string, props map[string]any) string {
 func evalJS(jsCode string, props map[string]any) any {
 	prop_decl := ""
 	for prop_name, prop_value := range props {
-		prop_decl += prop_name + " = " + anyToString(prop_value) + ";"
+		prop_decl += "let " + prop_name + " = " + anyToString(prop_value) + ";"
 	}
 	vm := goja.New()
 	goja_value, _ := vm.RunString(prop_decl + jsCode)
@@ -490,7 +489,7 @@ func renderConditions(markup string, props map[string]any) string {
 			if part == "if" || part == "else if" {
 				condition := match[i+1]
 				result := match[i+2]
-				if evaluateCondition(condition, props) {
+				if isBoolAndTrue(evalJS(condition, props)) {
 					markup = strings.Replace(markup, full_match, result, 1)
 					break
 				}
@@ -504,33 +503,6 @@ func renderConditions(markup string, props map[string]any) string {
 		markup = strings.Replace(markup, full_match, "", 1) // Did not match any conditions, just remove it
 	}
 	return markup
-}
-
-func evaluateCondition(condition string, props map[string]any) bool {
-	vm := goja.New()
-	l := js.NewLexer(parse.NewInputString(condition))
-	for {
-		tt, text := l.Next()
-		switch tt {
-		case js.ErrorToken:
-			if l.Err() != io.EOF {
-				fmt.Println("Error: ", l.Err())
-			}
-			result, err := vm.RunString(condition)
-			if err != nil {
-				fmt.Println("For condition: " + condition)
-				log.Fatal(err)
-			}
-			return result.ToBoolean()
-		case js.IdentifierToken:
-			value, ok := props[string(text)]
-			if ok {
-				condition = strings.Replace(condition, string(text), anyToString(value), 1)
-			}
-		default:
-			//fmt.Println("Token Type is: " + js.TokenType(tt).String())
-		}
-	}
 }
 
 func renderLoops(markup string, props map[string]any) string {
@@ -658,7 +630,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		if len(match) >= 1 {
 			comp_path := match[1]
 			if strings.Contains(comp_path, `{`) && strings.Contains(comp_path, `}`) {
-				comp_path = evalAllBrackets(comp_path, props)
+				comp_path = strings.ReplaceAll(evalAllBrackets(comp_path, props), "`", "")
 			}
 			comp_args := strings.SplitAfter(match[2], "}")
 			comp_props := getCompArgs(comp_args, props)
@@ -694,6 +666,13 @@ func anyToString(value any) string {
 		fmt.Println(reflect.TypeOf(value))
 		return ""
 	}
+}
+
+func isBoolAndTrue(value any) bool {
+	if b, ok := value.(bool); ok && b {
+		return true
+	}
+	return false
 }
 
 func main() {
