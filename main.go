@@ -163,11 +163,7 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 					}
 				}
 				if strings.Contains(attr.Val, "{") && strings.Contains(attr.Val, "}") {
-					valueStartPos := strings.IndexRune(attr.Val, '{')
-					valueEndPos := strings.IndexRune(attr.Val, '}')
-					jsCode := attr.Val[valueStartPos+1 : valueEndPos]
-					evaluatedVal := anyToString(evalJS(jsCode, props))
-					node.Attr[i].Val = attr.Val[0:valueStartPos] + evaluatedVal + attr.Val[valueEndPos+1:]
+					node.Attr[i].Val = evalAllBrackets(attr.Val, props)
 				}
 			}
 
@@ -440,6 +436,21 @@ func evaluateProps(fence string, allVars []string, props map[string]any) map[str
 		props[name] = evaluated_value
 	}
 	return props
+}
+
+func evalAllBrackets(str string, props map[string]any) string {
+	for {
+		startPos := strings.IndexRune(str, '{')
+		endPos := strings.IndexRune(str, '}')
+		if startPos == -1 || endPos == -1 {
+			break
+		}
+		jsCode := str[startPos+1 : endPos]
+		evaluated := anyToString(evalJS(jsCode, props))
+		str = str[0:startPos] + evaluated + str[endPos+1:]
+	}
+	fmt.Println(str)
+	return str
 }
 
 func evalJS(jsCode string, props map[string]any) any {
