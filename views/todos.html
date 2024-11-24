@@ -4,9 +4,7 @@ prop number;
 
 <script>
 	let t = document.querySelector(".todos");
-    //let num = t.dataset.number;
-	let n = document.querySelector(".number");
-    let num = Number(n.textContent);
+    let num = t.dataset.number;
 	fetch('https://jsonplaceholder.typicode.com/todos')
 		.then(response => response.json())
 		.then(json => {
@@ -16,7 +14,6 @@ prop number;
 		})
 </script>
 
-<span class="number" style="display: none;">{number}</span>
 <table>
 	<thead>
 		<tr>

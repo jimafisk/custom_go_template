@@ -77,8 +77,6 @@ type scopedElement struct {
 }
 
 func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
-	fmt.Println("DOC_PORPS")
-	fmt.Println(markup)
 	scopedElements := []scopedElement{}
 	node, _ := html.Parse(strings.NewReader(markup))
 
@@ -96,8 +94,6 @@ func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
 }
 
 func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []scopedElement) {
-	fmt.Println("COMP_PORPS")
-	fmt.Println(comp_props)
 	// We scope components differently than the full document
 	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
 	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
@@ -166,27 +162,13 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 						node.Attr[i].Val += " " + scopedClass
 					}
 				}
-				fmt.Println("Tag: " + tag)
-				fmt.Println("Key: " + attr.Key)
-				fmt.Println("Val: " + attr.Val)
 				if strings.Contains(attr.Val, "{") && strings.Contains(attr.Val, "}") {
-					//fmt.Print(props)
 					valueStartPos := strings.IndexRune(attr.Val, '{')
 					valueEndPos := strings.IndexRune(attr.Val, '}')
-					//evaluatedVal := anyToString(evalJS(attr.Val[valueStartPos+1:valueEndPos], props))
 					jsCode := attr.Val[valueStartPos+1 : valueEndPos]
-					fmt.Println(props)
-					fmt.Println("jsCode: " + jsCode)
-					if jsCode == "number" {
-						fmt.Println(node)
-					}
-					evaluatedVal := anyToString(evalJS(attr.Val[valueStartPos+1:valueEndPos], props))
-					fmt.Println(evaluatedVal)
-					//attr.Val = attr.Val[0:valueStartPos] + evaluatedVal + attr.Val[valueEndPos+1:]
+					evaluatedVal := anyToString(evalJS(jsCode, props))
 					node.Attr[i].Val = attr.Val[0:valueStartPos] + evaluatedVal + attr.Val[valueEndPos+1:]
-					fmt.Println("New Val: " + attr.Val)
 				}
-				fmt.Println()
 			}
 
 			if len(classes) == 0 {
