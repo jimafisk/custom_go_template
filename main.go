@@ -656,21 +656,13 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 	matches := reDynamicComponent.FindAllStringSubmatch(markup, -1)
 	for _, match := range matches {
 		if len(match) >= 1 {
-			var comp_path string
-			wrapped_comp_path := match[1]
-			if strings.HasPrefix(wrapped_comp_path, `"`) && strings.HasSuffix(wrapped_comp_path, `"`) {
-				comp_path = strings.Trim(wrapped_comp_path, `"`)
-			}
-			if strings.HasPrefix(wrapped_comp_path, `'`) && strings.HasSuffix(wrapped_comp_path, `'`) {
-				comp_path = strings.Trim(wrapped_comp_path, `'`)
-			}
-			if strings.HasPrefix(wrapped_comp_path, `{`) && strings.HasSuffix(wrapped_comp_path, `}`) {
-				comp_path_var := strings.Trim(wrapped_comp_path, "{}")
-				// TODO: Should actually eval path, not just swap in prop
-				comp_path = fmt.Sprintf("%v", props[comp_path_var]) // Converts any to string, but doesn't wrap in quotes like anyToString()
+			comp_path := match[1]
+			if strings.Contains(comp_path, `{`) && strings.Contains(comp_path, `}`) {
+				comp_path = evalAllBrackets(comp_path, props)
 			}
 			comp_args := strings.SplitAfter(match[2], "}")
 			comp_props := getCompArgs(comp_args, props)
+			comp_path = strings.Trim(comp_path, "\"'`") // Remove backticks, single and double quotes
 			comp_markup, comp_script, comp_style := Render(comp_path, comp_props)
 			// Create scoped classes and add to html
 			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props)
