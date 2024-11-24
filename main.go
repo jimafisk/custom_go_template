@@ -451,13 +451,18 @@ func evalAllBrackets(str string, props map[string]any) string {
 	return str
 }
 
-func evalJS(jsCode string, props map[string]any) any {
-	prop_decl := ""
+func declProps(props map[string]any) string {
+	props_decl := ""
 	for prop_name, prop_value := range props {
-		prop_decl += "let " + prop_name + " = " + anyToString(prop_value) + ";"
+		props_decl += "let " + prop_name + " = " + anyToString(prop_value) + ";"
 	}
+	return props_decl
+}
+
+func evalJS(jsCode string, props map[string]any) any {
+	props_decl := declProps(props)
 	vm := goja.New()
-	goja_value, _ := vm.RunString(prop_decl + jsCode)
+	goja_value, _ := vm.RunString(props_decl + jsCode)
 	return goja_value.Export()
 }
 
@@ -520,7 +525,7 @@ func renderLoops(markup string, props map[string]any) string {
 				if !ok {
 					collection_value = collection
 				}
-				items := evaluateLoop(fmt.Sprintf("%v", collection_value)) // like anyToString() but doesn't wrap in quotes
+				items := evaluateLoop(fmt.Sprintf("%v", collection_value), props) // like anyToString() but doesn't wrap in quotes
 				for _, value := range items {
 					reLoopVar := regexp.MustCompile(`{` + iterator + `}`)
 					evaluated_result := reLoopVar.ReplaceAllString(result, value)
@@ -540,9 +545,10 @@ func renderLoops(markup string, props map[string]any) string {
 	return markup
 }
 
-func evaluateLoop(collection_value string) []string {
+func evaluateLoop(collection_value string, props map[string]any) []string {
+	props_decl := declProps(props)
 	vm := goja.New()
-	v, err := vm.RunString(collection_value)
+	v, err := vm.RunString(props_decl + collection_value)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -654,19 +660,68 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 	return markup, script, style
 }
 
+func formatArray(value any) string {
+	val := reflect.ValueOf(value)
+	var elements []string
+	for i := 0; i < val.Len(); i++ {
+		elem := val.Index(i).Interface()
+		elements = append(elements, anyToString(elem)) // Recursively format each element
+	}
+	return "[" + strings.Join(elements, ", ") + "]"
+}
+
+func formatElement(value any) string {
+	switch v := value.(type) {
+	case string:
+		return strconv.Quote(v)
+	case int:
+		return strconv.Itoa(v)
+	case int64:
+		return strconv.FormatInt(v, 10)
+	case float64:
+		return strconv.FormatFloat(v, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(v)
+	default:
+		return "unknown type"
+	}
+}
+
+func anyToString(value any) string {
+	val := reflect.ValueOf(value)
+	switch val.Kind() {
+	case reflect.Array, reflect.Slice:
+		return formatArray(value)
+	default:
+		return formatElement(value)
+	}
+}
+
+/*
 func anyToString(value any) string {
 	switch value := value.(type) {
 	case string:
-		return "`" + value + "`"
+		//return "`" + value + "`"
+		return strconv.Quote(value)
 	case int:
 		return strconv.Itoa(value)
 	case int64:
 		return strconv.Itoa(int(value))
+	case float64:
+		return strconv.FormatFloat(value, 'f', -1, 64)
+	case bool:
+		return strconv.FormatBool(value)
 	default:
+		val := reflect.ValueOf(value)
+		if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
+			fmt.Println("array or slice")
+			fmt.Println(value)
+		}
 		fmt.Println(reflect.TypeOf(value))
 		return ""
 	}
 }
+*/
 
 func isBoolAndTrue(value any) bool {
 	if b, ok := value.(bool); ok && b {
