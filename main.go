@@ -445,7 +445,7 @@ func evalAllBrackets(str string, props map[string]any) string {
 			break
 		}
 		jsCode := str[startPos+1 : endPos]
-		evaluated := anyToString(evalJS(jsCode, props))
+		evaluated := fmt.Sprintf("%v", evalJS(jsCode, props))
 		str = str[0:startPos] + evaluated + str[endPos+1:]
 	}
 	return str
@@ -630,7 +630,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		if len(match) >= 1 {
 			comp_path := match[1]
 			if strings.Contains(comp_path, `{`) && strings.Contains(comp_path, `}`) {
-				comp_path = strings.ReplaceAll(evalAllBrackets(comp_path, props), "`", "")
+				comp_path = evalAllBrackets(comp_path, props)
 			}
 			comp_args := strings.SplitAfter(match[2], "}")
 			comp_props := getCompArgs(comp_args, props)
