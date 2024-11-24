@@ -449,7 +449,6 @@ func evalAllBrackets(str string, props map[string]any) string {
 		evaluated := anyToString(evalJS(jsCode, props))
 		str = str[0:startPos] + evaluated + str[endPos+1:]
 	}
-	fmt.Println(str)
 	return str
 }
 
@@ -601,6 +600,29 @@ func getComponents(fence string) (string, []Component) {
 	return fence, components
 }
 
+func getCompArgs(comp_args []string, props map[string]any) map[string]any {
+	comp_props := map[string]any{}
+	for _, comp_arg := range comp_args {
+		comp_arg = strings.TrimSpace(comp_arg)
+		if strings.HasPrefix(comp_arg, "{") && strings.HasSuffix(comp_arg, "}") {
+			prop_name := strings.Trim(comp_arg, "{}")
+			prop_value := props[prop_name]
+			comp_props[prop_name] = prop_value
+		}
+		if strings.Contains(comp_arg, "={") && strings.HasSuffix(comp_arg, "}") {
+			nameEndPos := strings.IndexRune(comp_arg, '=')
+			prop_name := comp_arg[0:nameEndPos]
+
+			valueStartPos := strings.IndexRune(comp_arg, '{')
+			valueEndPos := strings.IndexRune(comp_arg, '}')
+			prop_value := evalJS(comp_arg[valueStartPos+1:valueEndPos], props)
+
+			comp_props[prop_name] = prop_value
+		}
+	}
+	return comp_props
+}
+
 func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
 	// Handle staticly imported components
 	for _, component := range components {
@@ -608,26 +630,8 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		matches := reComponent.FindAllStringSubmatch(markup, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
-				comp_props := map[string]any{}
 				comp_args := strings.SplitAfter(match[1], "}")
-				for _, comp_arg := range comp_args {
-					comp_arg = strings.TrimSpace(comp_arg)
-					if strings.HasPrefix(comp_arg, "{") && strings.HasSuffix(comp_arg, "}") {
-						prop_name := strings.Trim(comp_arg, "{}")
-						prop_value := props[prop_name]
-						comp_props[prop_name] = prop_value
-					}
-					if strings.Contains(comp_arg, "={") && strings.HasSuffix(comp_arg, "}") {
-						nameEndPos := strings.IndexRune(comp_arg, '=')
-						prop_name := comp_arg[0:nameEndPos]
-
-						valueStartPos := strings.IndexRune(comp_arg, '{')
-						valueEndPos := strings.IndexRune(comp_arg, '}')
-						prop_value := evalJS(comp_arg[valueStartPos+1:valueEndPos], props)
-
-						comp_props[prop_name] = prop_value
-					}
-				}
+				comp_props := getCompArgs(comp_args, props)
 				// Recursively render imports
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
@@ -648,7 +652,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		}
 	}
 	// Handle dynamic components
-	reDynamicComponent := regexp.MustCompile(`<=(".*?"|'.*?'|{.*?})\s({.*?})?(?:\s)?/>`)
+	reDynamicComponent := regexp.MustCompile(`<=(".*?"|'.*?'|{.*?})\s(.*?)?(?:\s)?/>`)
 	matches := reDynamicComponent.FindAllStringSubmatch(markup, -1)
 	for _, match := range matches {
 		if len(match) >= 1 {
@@ -662,17 +666,11 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			}
 			if strings.HasPrefix(wrapped_comp_path, `{`) && strings.HasSuffix(wrapped_comp_path, `}`) {
 				comp_path_var := strings.Trim(wrapped_comp_path, "{}")
+				// TODO: Should actually eval path, not just swap in prop
 				comp_path = fmt.Sprintf("%v", props[comp_path_var]) // Converts any to string, but doesn't wrap in quotes like anyToString()
 			}
-			comp_props := map[string]any{}
-			if len(match) >= 2 && match[2] != "" {
-				comp_props_str := match[2]
-				prop_names := strings.Split(comp_props_str, " ")
-				for _, wrapped_prop_name := range prop_names {
-					prop_name := strings.Trim(wrapped_prop_name, "{}")
-					comp_props[prop_name] = props[prop_name]
-				}
-			}
+			comp_args := strings.SplitAfter(match[2], "}")
+			comp_props := getCompArgs(comp_args, props)
 			comp_markup, comp_script, comp_style := Render(comp_path, comp_props)
 			// Create scoped classes and add to html
 			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props)
