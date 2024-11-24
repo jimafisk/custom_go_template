@@ -56,7 +56,7 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
 	// Create scoped classes and add to html
-	markup, scopedElements := scopeHTML(markup)
+	markup, scopedElements := scopeHTML(markup, props)
 	// Add scoped classes to css
 	style, _ = scopeCSS(style, scopedElements)
 
@@ -76,11 +76,13 @@ type scopedElement struct {
 	scopedClass string
 }
 
-func scopeHTML(markup string) (string, []scopedElement) {
+func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
+	fmt.Println("DOC_PORPS")
+	fmt.Println(markup)
 	scopedElements := []scopedElement{}
 	node, _ := html.Parse(strings.NewReader(markup))
 
-	node, scopedElements = traverse(node, scopedElements)
+	node, scopedElements = traverse(node, scopedElements, props)
 
 	// Render the modified HTML back to a string
 	buf := &strings.Builder{}
@@ -93,7 +95,9 @@ func scopeHTML(markup string) (string, []scopedElement) {
 	return markup, scopedElements
 }
 
-func scopeHTMLComp(comp_markup string) (string, []scopedElement) {
+func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []scopedElement) {
+	fmt.Println("COMP_PORPS")
+	fmt.Println(comp_props)
 	// We scope components differently than the full document
 	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
 	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
@@ -110,7 +114,7 @@ func scopeHTMLComp(comp_markup string) (string, []scopedElement) {
 		DataAtom: atom.Body,
 	})
 	for _, node := range nodes {
-		node, scopedElements = traverse(node, scopedElements)
+		node, scopedElements = traverse(node, scopedElements, comp_props)
 
 		buf := &strings.Builder{}
 		err := html.Render(buf, node)
@@ -127,7 +131,7 @@ func scopeHTMLComp(comp_markup string) (string, []scopedElement) {
 	return comp_markup, scopedElements
 }
 
-func traverse(node *html.Node, scopedElements []scopedElement) (*html.Node, []scopedElement) {
+func traverse(node *html.Node, scopedElements []scopedElement, props map[string]any) (*html.Node, []scopedElement) {
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
 		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
@@ -162,6 +166,27 @@ func traverse(node *html.Node, scopedElements []scopedElement) (*html.Node, []sc
 						node.Attr[i].Val += " " + scopedClass
 					}
 				}
+				fmt.Println("Tag: " + tag)
+				fmt.Println("Key: " + attr.Key)
+				fmt.Println("Val: " + attr.Val)
+				if strings.Contains(attr.Val, "{") && strings.Contains(attr.Val, "}") {
+					//fmt.Print(props)
+					valueStartPos := strings.IndexRune(attr.Val, '{')
+					valueEndPos := strings.IndexRune(attr.Val, '}')
+					//evaluatedVal := anyToString(evalJS(attr.Val[valueStartPos+1:valueEndPos], props))
+					jsCode := attr.Val[valueStartPos+1 : valueEndPos]
+					fmt.Println(props)
+					fmt.Println("jsCode: " + jsCode)
+					if jsCode == "number" {
+						fmt.Println(node)
+					}
+					evaluatedVal := anyToString(evalJS(attr.Val[valueStartPos+1:valueEndPos], props))
+					fmt.Println(evaluatedVal)
+					//attr.Val = attr.Val[0:valueStartPos] + evaluatedVal + attr.Val[valueEndPos+1:]
+					node.Attr[i].Val = attr.Val[0:valueStartPos] + evaluatedVal + attr.Val[valueEndPos+1:]
+					fmt.Println("New Val: " + attr.Val)
+				}
+				fmt.Println()
 			}
 
 			if len(classes) == 0 {
@@ -613,7 +638,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 				// Recursively render imports
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
-				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup)
+				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props)
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 				// Add scoped classes to js
@@ -657,7 +682,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			}
 			comp_markup, comp_script, comp_style := Render(comp_path, comp_props)
 			// Create scoped classes and add to html
-			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup)
+			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props)
 			// Add scoped classes to css
 			comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
