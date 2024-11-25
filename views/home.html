@@ -37,7 +37,7 @@ let animals = ["cat", "dog", "whale"];
 				<Todos number={7 - 2} />
 			{/if}
 			<div class="animals">
-				{for let animal of ["cat", "dog", "whale"]}
+				{for let animal of ["new animal", ...animals]}
 					<div class="type-{animal}">{name} likes: {animal}s</div>
 				{/for}
 			</div>

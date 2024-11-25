@@ -445,7 +445,7 @@ func evalAllBrackets(str string, props map[string]any) string {
 			break
 		}
 		jsCode := str[startPos+1 : endPos]
-		evaluated := fmt.Sprintf("%v", evalJS(jsCode, props))
+		evaluated := fmt.Sprintf("%v", evalJS(jsCode, props)) // Like anyToString but doesn't wrap strings in quotes
 		str = str[0:startPos] + evaluated + str[endPos+1:]
 	}
 	return str
@@ -521,11 +521,8 @@ func renderLoops(markup string, props map[string]any) string {
 				collection := match[i+1]
 				result := match[i+2]
 				full_result := ""
-				collection_value, ok := props[collection]
-				if !ok {
-					collection_value = collection
-				}
-				items := evaluateLoop(fmt.Sprintf("%v", collection_value), props) // like anyToString() but doesn't wrap in quotes
+				collection_value := evalJS(collection, props)
+				items := evaluateLoop(anyToString(collection_value))
 				for _, value := range items {
 					reLoopVar := regexp.MustCompile(`{` + iterator + `}`)
 					evaluated_result := reLoopVar.ReplaceAllString(result, value)
@@ -545,10 +542,9 @@ func renderLoops(markup string, props map[string]any) string {
 	return markup
 }
 
-func evaluateLoop(collection_value string, props map[string]any) []string {
-	props_decl := declProps(props)
+func evaluateLoop(collection_value string) []string {
 	vm := goja.New()
-	v, err := vm.RunString(props_decl + collection_value)
+	v, err := vm.RunString(collection_value)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -696,32 +692,6 @@ func anyToString(value any) string {
 		return formatElement(value)
 	}
 }
-
-/*
-func anyToString(value any) string {
-	switch value := value.(type) {
-	case string:
-		//return "`" + value + "`"
-		return strconv.Quote(value)
-	case int:
-		return strconv.Itoa(value)
-	case int64:
-		return strconv.Itoa(int(value))
-	case float64:
-		return strconv.FormatFloat(value, 'f', -1, 64)
-	case bool:
-		return strconv.FormatBool(value)
-	default:
-		val := reflect.ValueOf(value)
-		if val.Kind() == reflect.Array || val.Kind() == reflect.Slice {
-			fmt.Println("array or slice")
-			fmt.Println(value)
-		}
-		fmt.Println(reflect.TypeOf(value))
-		return ""
-	}
-}
-*/
 
 func isBoolAndTrue(value any) bool {
 	if b, ok := value.(bool); ok && b {
