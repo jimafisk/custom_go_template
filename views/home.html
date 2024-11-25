@@ -39,6 +39,7 @@ let animals = ["cat", "dog", "whale"];
 			<div class="animals">
 				{for let animal of ["new animal", ...animals]}
 					<div class="type-{animal}">{name} likes: {animal}s</div>
+					<div>Singular, spelled backwards: {animal.split('').reverse().join('')}</div>
 				{/for}
 			</div>
 		</main>

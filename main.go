@@ -524,9 +524,8 @@ func renderLoops(markup string, props map[string]any) string {
 				collection_value := evalJS(collection, props)
 				items := evaluateLoop(anyToString(collection_value))
 				for _, value := range items {
-					reLoopVar := regexp.MustCompile(`{` + iterator + `}`)
-					evaluated_result := reLoopVar.ReplaceAllString(result, value)
-					full_result = full_result + evaluated_result
+					props[iterator] = value
+					full_result += evalAllBrackets(result, props)
 				}
 				markup = strings.Replace(markup, full_match, full_result, 1)
 				break
