@@ -46,8 +46,6 @@ func Render(path string, props map[string]any) (string, string, string) {
 	allVars := getAllVars(fence)
 	// Run the JS in Goja to get the computed values for props
 	props = evaluateProps(fence, allVars, props)
-	// Replace any simple vars in the format {myProp} with the value
-	markup = applyProps(markup, props)
 	// Run template conditions {if}{else}{/if}
 	markup = renderConditions(markup, props)
 	// Run template loops {for let _ in _}{/for} and {for let _ of _}{/for}
@@ -129,6 +127,9 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []sco
 func traverse(node *html.Node, scopedElements []scopedElement, props map[string]any) (*html.Node, []scopedElement) {
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
+		if node.Type == html.TextNode {
+			node.Data = evalAllBrackets(node.Data, props)
+		}
 		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
 			tag := node.Data
 			id := ""
@@ -464,25 +465,6 @@ func evalJS(jsCode string, props map[string]any) any {
 	vm := goja.New()
 	goja_value, _ := vm.RunString(props_decl + jsCode)
 	return goja_value.Export()
-}
-
-func applyProps(markup string, props map[string]any) string {
-	// Replace placeholders with data
-	for name, value := range props {
-		reTextNodesOnly := regexp.MustCompile(fmt.Sprintf(`(>.*?)({%s})(.*?<)`, name)) // TODO: Only temp replacing textnodes to avoid conflicts with props
-		switch value := value.(type) {
-		case string:
-			markup = reTextNodesOnly.ReplaceAllString(markup, `${1}`+value+`${3}`)
-		case int:
-			markup = reTextNodesOnly.ReplaceAllString(markup, `${1}`+strconv.Itoa(value)+`${3}`)
-		case int64:
-			markup = reTextNodesOnly.ReplaceAllString(markup, `${1}`+strconv.Itoa(int(value))+`${3}`)
-		default:
-			// handle other values
-			fmt.Println(reflect.TypeOf(value))
-		}
-	}
-	return markup
 }
 
 func renderConditions(markup string, props map[string]any) string {
