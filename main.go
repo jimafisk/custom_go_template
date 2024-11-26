@@ -393,17 +393,7 @@ func templateParts(template string) (string, string, string, string) {
 func setProps(fence string, props map[string]any) string {
 	for name, value := range props {
 		reProp := regexp.MustCompile(fmt.Sprintf(`prop (%s)(\s?=\s?(.*?))?;`, name))
-		switch value := value.(type) {
-		case string:
-			fence = reProp.ReplaceAllString(fence, "let "+name+"='"+value+"';")
-		case int:
-			fence = reProp.ReplaceAllString(fence, "let "+name+"="+strconv.Itoa(value)+";")
-		case int64:
-			fence = reProp.ReplaceAllString(fence, "let "+name+"="+strconv.Itoa(int(value))+";")
-		default:
-			// handle other values
-			fmt.Println(reflect.TypeOf(value))
-		}
+		fence = reProp.ReplaceAllString(fence, "let "+name+" = "+anyToString(value)+";")
 	}
 	// Convert prop to let for unpassed props
 	rePropDefaults := regexp.MustCompile(`prop (.*?);`)
@@ -683,7 +673,7 @@ func isBoolAndTrue(value any) bool {
 
 func main() {
 	// Render the template with data
-	props := map[string]any{"name": "John", "age": 2}
+	props := map[string]any{"name": "John", "age": 2, "animals": []string{"cat", "dog", "pig"}}
 	markup, script, style := Render("views/home.html", props)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
