@@ -1,6 +1,5 @@
 ---
 import Age from "./views/age.html";
-import Double from "./views/double.html";
 import Head from "./views/head.html";
 import Todos from "./views/todos.html";
 
@@ -33,11 +32,9 @@ let comp = "mycomp";
 			{/if}
 			{if age > 0}
 				<Age {name} {age} />
-				<Double {age} />
 				<Todos number={age + 5} />
 
 				<Age {name} age={50} />
-				<Double {age} {text} />
 				<Todos number={14} />
 
 				<Age {name} age={201} />

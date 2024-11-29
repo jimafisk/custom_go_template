@@ -1,4 +1,6 @@
 ---
+import Double from "./views/double.html";
+
 prop name;
 prop age;
 ---
@@ -22,6 +24,8 @@ prop age;
 	{else}
 		<div class="new">Just a baby</div>
 	{/if}
+
+	<Double {age} text={age > 100 ? "yoooo that's old" : ""} />
 </div>
 
 <style>
