@@ -1,12 +1,6 @@
 ---
-import Double from "./views/double.html";
-
 prop name;
 prop age;
-
-let path = "./views/mycomp.html";
-let comp = "mycomp";
-let text = "something";
 ---
 
 <script>
@@ -28,12 +22,6 @@ let text = "something";
 	{else}
 		<div class="new">Just a baby</div>
 	{/if}
-
-	<Double {age} />
-	<Double {age} {text} />
-	<="./views/mycomp.html" {age} />
-	<={path} />
-	<="./views/{comp}.html" age={age + 1} />
 </div>
 
 <style>

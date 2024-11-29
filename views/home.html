@@ -1,5 +1,6 @@
 ---
 import Age from "./views/age.html";
+import Double from "./views/double.html";
 import Head from "./views/head.html";
 import Todos from "./views/todos.html";
 
@@ -8,8 +9,13 @@ prop age;
 prop animals;
 prop test = "whatever";
 
+let text = "something";
+
 var salutation = "hola";
 //var salutation;
+
+let path = "./views/mycomp.html";
+let comp = "mycomp";
 ---
 
 <!DOCTYPE html>
@@ -27,19 +33,33 @@ var salutation = "hola";
 			{/if}
 			{if age > 0}
 				<Age {name} {age} />
+				<Double {age} />
 				<Todos number={age + 5} />
 
 				<Age {name} age={50} />
+				<Double {age} {text} />
 				<Todos number={14} />
 
 				<Age {name} age={201} />
 				<Todos number={7 - 2} />
 			{/if}
+
+			<="./views/mycomp.html" {age} />
+			<={path} />
+			<="./views/{comp}.html" age={age + 1} />
+
 			<div class="animals">
 				{for let animal of ["new animal", ...animals]}
 					<div class="type-{animal}">{name} likes: {animal}s</div>
-					<div>Singular, spelled backwards: {animal.split('').reverse().join('')}</div>
+					<div>Backwards: s{animal.split('').reverse().join('')}</div>
+					<button onclick="{animals.filter(a => a !== animal)}">Remove {animal}</button>
+					<br><br>
 				{/for}
+			</div>
+			<div>
+				<h3>Add new animal:</h3>
+				<input type="text" placeholder="animal name">
+				<button onclick="{animals = ['new', ...animals]}">Submit</button>
 			</div>
 		</main>
 	</body>
