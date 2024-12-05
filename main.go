@@ -47,7 +47,8 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Run the JS in Goja to get the computed values for props
 	props = evaluateProps(fence, allVars, props)
 	// Run template conditions {if}{else}{/if}
-	markup = renderConditions(markup, props)
+	//markup = renderConditions(markup, props)
+	markup, _ = FindIfConditions(markup, props)
 	// Run template loops {for let _ in _}{/for} and {for let _ of _}{/for}
 	markup = renderLoops(markup, props)
 	// Recursively render imported components
@@ -453,8 +454,78 @@ func declProps(props map[string]any) string {
 func evalJS(jsCode string, props map[string]any) any {
 	props_decl := declProps(props)
 	vm := goja.New()
-	goja_value, _ := vm.RunString(props_decl + jsCode)
+	goja_value, err := vm.RunString(props_decl + jsCode)
+	if err != nil {
+		return ""
+		return jsCode
+	}
 	return goja_value.Export()
+}
+
+// FindIfConditions finds if-conditions in a given string
+func FindIfConditions(markup string, props map[string]any) (string, error) {
+	modifiedMarkup := markup
+	var stack []string
+	var currentCondition string
+	var currentContent string
+	var startContentIndex int
+	var startContentIndexes []int
+	var startConditionIndex int
+	var startConditionIndexes []int
+	difference := 0
+
+	for i := 0; i < len(markup); i++ {
+		if strings.HasPrefix(markup[i:], "{if ") {
+			// Push the current condition and content to the stack
+			stack = append(stack, currentCondition)
+			stack = append(stack, currentContent)
+
+			// Extract the condition
+			j := strings.Index(markup[i:], "}")
+			if j == -1 {
+				return "", fmt.Errorf("unbalanced if-condition at index %d", i)
+			}
+			currentCondition = markup[i+4 : i+j]
+
+			startConditionIndex = i
+			startConditionIndexes = append(startConditionIndexes, startConditionIndex)
+
+			startContentIndex = i + j + 1
+			startContentIndexes = append(startContentIndexes, startContentIndex)
+
+			// Reset the current content
+			//currentContent = ""
+		} else if strings.HasPrefix(markup[i:], "{/if}") {
+			// Pop the previous condition and content from the stack
+			if len(stack) < 2 {
+				return "", fmt.Errorf("unbalanced if-condition at index %d", i)
+			}
+			prevContent := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			prevCondition := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+
+			startContentIndex = startContentIndexes[len(startContentIndexes)-1]    // Get the last start index for content
+			startContentIndexes = startContentIndexes[:len(startContentIndexes)-1] // Remove the last start index from the list
+			currentContent = modifiedMarkup[startContentIndex : i-difference]      // Extract the content
+
+			startConditionIndex = startConditionIndexes[len(startConditionIndexes)-1]
+			startConditionIndexes = startConditionIndexes[:len(startConditionIndexes)-1]
+			fmt.Println(currentCondition)
+			if isBoolAndTrue(evalJS(currentCondition, props)) {
+				modifiedMarkup = modifiedMarkup[:startConditionIndex] + currentContent + modifiedMarkup[i+5-difference:]
+				difference = len(markup) - len(modifiedMarkup)
+			} else {
+				modifiedMarkup = modifiedMarkup[:startConditionIndex] + modifiedMarkup[i+5-difference:]
+			}
+
+			// Update the current condition and content
+			currentCondition = prevCondition
+			currentContent = prevContent
+		}
+	}
+
+	return modifiedMarkup, nil
 }
 
 func renderConditions(markup string, props map[string]any) string {
