@@ -457,7 +457,7 @@ func evalJS(jsCode string, props map[string]any) any {
 	goja_value, err := vm.RunString(props_decl + jsCode)
 	if err != nil {
 		return ""
-		return jsCode
+		//return jsCode
 	}
 	return goja_value.Export()
 }
@@ -465,45 +465,66 @@ func evalJS(jsCode string, props map[string]any) any {
 // FindIfConditions finds if-conditions in a given string
 func FindIfConditions(markup string, props map[string]any) (string, error) {
 	modifiedMarkup := markup
-	var stack []string
 	var currentCondition string
+	var conditions []string
 	var currentContent string
 	var startContentIndex int
 	var startContentIndexes []int
 	var startConditionIndex int
+	var endConditionIndex int
 	var startConditionIndexes []int
 	difference := 0
+	//trueConditionMet := false
+	//var firstTrueContent string
+	//fmt.Println(trueConditionMet)
 
 	for i := 0; i < len(markup); i++ {
-		if strings.HasPrefix(markup[i:], "{if ") {
-			// Push the current condition and content to the stack
-			stack = append(stack, currentCondition)
-			stack = append(stack, currentContent)
-
-			// Extract the condition
-			j := strings.Index(markup[i:], "}")
-			if j == -1 {
-				return "", fmt.Errorf("unbalanced if-condition at index %d", i)
-			}
-			currentCondition = markup[i+4 : i+j]
-
+		if strings.HasPrefix(markup[i:], "{if ") || strings.HasPrefix(markup[i:], "{else if ") {
 			startConditionIndex = i
 			startConditionIndexes = append(startConditionIndexes, startConditionIndex)
 
-			startContentIndex = i + j + 1
+			// Extract the condition
+			relativeEndConditionIndex := strings.Index(markup[i:], "}")
+			if relativeEndConditionIndex == -1 {
+				return "", fmt.Errorf("unbalanced if-condition at index %d", i)
+			}
+			endConditionIndex = startConditionIndex + relativeEndConditionIndex
+
+			//currentCondition = markup[startConditionIndex+len("{if ") : i+endConditionIndex]
+			conditionTypeLength := len("{if ")
+			if strings.HasPrefix(markup[i:], "{else if ") {
+				conditionTypeLength = len("{else if ")
+			}
+
+			currentCondition = markup[startConditionIndex+conditionTypeLength : endConditionIndex]
+			conditions = append(conditions, currentCondition)
+
+			//startContentIndex = startConditionIndex + endConditionIndex + 1
+			startContentIndex = endConditionIndex + 1
 			startContentIndexes = append(startContentIndexes, startContentIndex)
 
 			// Reset the current content
 			//currentContent = ""
-		} else if strings.HasPrefix(markup[i:], "{/if}") {
-			// Pop the previous condition and content from the stack
-			if len(stack) < 2 {
-				return "", fmt.Errorf("unbalanced if-condition at index %d", i)
+			//} else if strings.HasPrefix(markup[i:], "{else if ") {
+		}
+		if strings.HasPrefix(markup[i:], "{else if ") {
+		}
+		if strings.HasPrefix(markup[i:], "{else}") {
+			// Check condition from prior if / else if
+			currentCondition = conditions[len(conditions)-1]
+			if !isBoolAndTrue(evalJS(currentCondition, props)) {
+				conditions[len(conditions)-1] = "true"
+				startContentIndex = i + len("{else}") + 1
+				startConditionIndexes[len(startConditionIndexes)-1] = startContentIndex
 			}
-			prevContent := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
-			prevCondition := stack[len(stack)-1]
-			stack = stack[:len(stack)-1]
+
+		}
+		//} else if strings.HasPrefix(markup[i:], "{/if}") || strings.HasPrefix(markup[i:], "{else if ") || strings.HasPrefix(markup[i:], "{else ") {
+		if strings.HasPrefix(markup[i:], "{/if}") {
+			// Update the current condition and content
+			fmt.Println(conditions)
+			currentCondition = conditions[len(conditions)-1]
+			conditions = conditions[:len(conditions)-1]
 
 			startContentIndex = startContentIndexes[len(startContentIndexes)-1]    // Get the last start index for content
 			startContentIndexes = startContentIndexes[:len(startContentIndexes)-1] // Remove the last start index from the list
@@ -511,17 +532,35 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 
 			startConditionIndex = startConditionIndexes[len(startConditionIndexes)-1]
 			startConditionIndexes = startConditionIndexes[:len(startConditionIndexes)-1]
+
+			/*
+				conditionTypeLength := len("{/if}")
+				if strings.HasPrefix(markup[i:], "{else if ") {
+					conditionTypeLength = len("{else if ")
+				}
+			*/
+
 			fmt.Println(currentCondition)
 			if isBoolAndTrue(evalJS(currentCondition, props)) {
-				modifiedMarkup = modifiedMarkup[:startConditionIndex] + currentContent + modifiedMarkup[i+5-difference:]
+				/*
+					if strings.HasPrefix(markup[i:], "{else if ") && !trueConditionMet {
+						trueConditionMet = true
+						firstTrueContent = currentContent
+						continue
+					}
+					if firstTrueContent != "" {
+						modifiedMarkup = modifiedMarkup[:startConditionIndex] + firstTrueContent + modifiedMarkup[i+len("{/if}")-difference:]
+
+					} else {
+						modifiedMarkup = modifiedMarkup[:startConditionIndex] + currentContent + modifiedMarkup[i+len("{/if}")-difference:]
+					}
+				*/
+				modifiedMarkup = modifiedMarkup[:startConditionIndex] + currentContent + modifiedMarkup[i+len("{/if}")-difference:]
 				difference = len(markup) - len(modifiedMarkup)
 			} else {
-				modifiedMarkup = modifiedMarkup[:startConditionIndex] + modifiedMarkup[i+5-difference:]
+				modifiedMarkup = modifiedMarkup[:startConditionIndex] + modifiedMarkup[i+len("{/if}")-difference:]
+				//difference = len(markup) - len(modifiedMarkup)
 			}
-
-			// Update the current condition and content
-			currentCondition = prevCondition
-			currentContent = prevContent
 		}
 	}
 
@@ -537,6 +576,11 @@ func renderConditions(markup string, props map[string]any) string {
 			if part == "if" || part == "else if" {
 				condition := match[i+1]
 				result := match[i+2]
+				nestedIfIndex := strings.Index(result, "{if")
+				if nestedIfIndex >= 0 {
+					full_match = full_match[nestedIfIndex:]
+					markup = strings.Replace(markup, full_match, result, 1)
+				}
 				if isBoolAndTrue(evalJS(condition, props)) {
 					markup = strings.Replace(markup, full_match, result, 1)
 					break
