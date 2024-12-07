@@ -466,31 +466,21 @@ func evalJS(jsCode string, props map[string]any) any {
 func FindIfConditions(markup string, props map[string]any) (string, error) {
 	modifiedMarkup := markup
 
-	depth := 0
-
 	var ifConditions []string
 	var elseIfConditions []string
 
 	var startOpenIfIndexes []int
 	var startElseIfIndexes []int
 	var startElseIndexes []int
-	//var startCloseIfIndexes []int
 
 	var startIfContentIndexes []int
 	var startElseIfContentIndexes []int
 	var startElseContentIndexes []int
 
 	difference := 0
-	//ifIsTrue := false
-	//elseIfIsTrue := false
-	//elseIsTrue := false
-	//ignoreElseIf := false
-	//ignoreElse := false
 
 	for i := 0; i < len(markup); i++ {
 		if strings.HasPrefix(markup[i:], "{if ") {
-			depth += 1
-
 			startOpenIfIndex := i
 			startOpenIfIndexes = append(startOpenIfIndexes, startOpenIfIndex)
 
@@ -520,25 +510,6 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 
 			startElseIfContentIndex := endElseIfIndex + 1
 			startElseIfContentIndexes = append(startElseIfContentIndexes, startElseIfContentIndex)
-			/*
-				if ifIsTrue {
-					//ignoreElseIf = true
-					//startCloseIfIndex := startElseIfIndex
-					//startCloseIfIndexes = append(startContentIndexes, startCloseIfIndex)
-				} else {
-					startElseIfIndex := i
-					relativeEndElseIfIndex := strings.Index(markup[startElseIfIndex:], "}")
-					if relativeEndElseIfIndex == -1 {
-						return "", fmt.Errorf("unbalanced if-condition at index %d", startElseIfIndex)
-					}
-					endElseIfIndex := startElseIfIndex + relativeEndElseIfIndex
-					currentCondition := markup[startElseIfIndex+len("{else if ") : endElseIfIndex]
-					if isBoolAndTrue(evalJS(currentCondition, props)) {
-						elseIfIsTrue = true
-					}
-
-				}
-			*/
 		} else if strings.HasPrefix(markup[i:], "{else}") {
 			startElseIndex := i
 			startElseIndexes = append(startElseIndexes, startElseIndex)
@@ -546,72 +517,85 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 
 			startElseContentIndex := endElseIndex + 1
 			startElseContentIndexes = append(startElseContentIndexes, startElseContentIndex)
-			/*
-				startElseIndex := i
-				if ifIsTrue {
-					startContentIndex := startContentIndexes[len(startContentIndexes)-1]
-					currentContent := modifiedMarkup[startContentIndex : startElseIndex-difference]
-					fmt.Println(currentContent)
-					startOpenIfIndex := startOpenIfIndexes[len(startOpenIfIndexes)-1]
-					modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentContent + modifiedMarkup[startElseIndex+len("{else}")-difference:]
-					fmt.Println(startElseIndex)
-					startElseIndexes = append(startElseIndexes, startElseIndex)
-					//ignoreElse = true
-					//startCloseIfIndex := startElseIndex
-					//startCloseIfIndexes = append(startContentIndexes, startCloseIfIndex)
-				} else if elseIfIsTrue {
-				} else {
-					//elseIsTrue = true
-					startContentIndex := startElseIndex + len("{else}")
-					startContentIndexes[len(startContentIndexes)-1] = startContentIndex
-				}
-			*/
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
-			depth -= 1
-
 			startCloseIfIndex := i
-			// Update the current condition and content
-			//fmt.Println(conditions)
+
 			currentIfCondition := ifConditions[len(ifConditions)-1]
 			ifConditions = ifConditions[:len(ifConditions)-1]
 
-			startIfContentIndex := startIfContentIndexes[len(startIfContentIndexes)-1]   // Get the last start index for content
-			startIfContentIndexes = startIfContentIndexes[:len(startIfContentIndexes)-1] // Remove the last start index from the list
+			startIfContentIndex := startIfContentIndexes[len(startIfContentIndexes)-1]
+			startIfContentIndexes = startIfContentIndexes[:len(startIfContentIndexes)-1]
+
 			endIfContentIndex := startCloseIfIndex
 			if len(startElseIfIndexes) > 0 {
 				endIfContentIndex = startElseIfIndexes[0]
 			} else if len(startElseIndexes) > 0 {
 				endIfContentIndex = startElseIndexes[0]
 			}
-			//currentIfContent := modifiedMarkup[startIfContentIndex : startCloseIfIndex-difference] // Extract the content
-			currentIfContent := modifiedMarkup[startIfContentIndex:endIfContentIndex] // Extract the content
+
+			currentIfContent := modifiedMarkup[startIfContentIndex:endIfContentIndex]
 
 			startOpenIfIndex := startOpenIfIndexes[len(startOpenIfIndexes)-1]
-			startOpenIfIndexes = startOpenIfIndexes[:len(startOpenIfIndexes)-1] // Remove last
+			startOpenIfIndexes = startOpenIfIndexes[:len(startOpenIfIndexes)-1]
 
 			fmt.Println(currentIfCondition)
 			if isBoolAndTrue(evalJS(currentIfCondition, props)) {
+				fmt.Println("If was true")
 				modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
 				startElseIfIndexes = nil
 				startElseIfContentIndexes = nil
 				startElseIndexes = nil
 				startElseContentIndexes = nil
-				//difference = len(markup) - len(modifiedMarkup)
+				elseIfConditions = nil
 			} else {
-				modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + modifiedMarkup[i+len("{/if}")-difference:]
-				//difference = len(markup) - len(modifiedMarkup)
-			}
-			/*
-				if len(startElseIndexes) > 0 {
-					startElseIndex := startElseIndexes[len(startElseIndexes)-1]
-					startElseIndexes = startElseIndexes[:len(startElseIndexes)-1]
-					modifiedMarkup = modifiedMarkup[:startElseIndex] + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
-				} else if ifIsTrue {
-					modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
-					ifIsTrue = false
+				elseIfWasTrue := false
+				endElseIfContentIndex := endIfContentIndex
+				//startElseIfContentIndex := startElseIfContentIndexes[len(startElseIfContentIndexes)-1]
+				startElseIfContentIndex := endIfContentIndex
+				for j, elseIfCondition := range elseIfConditions {
+					fmt.Println(elseIfCondition)
+					if isBoolAndTrue(evalJS(elseIfCondition, props)) && !elseIfWasTrue {
+						fmt.Println("Else If was true")
+						elseIfWasTrue = true
+						//startElseIfIndex := startElseIfIndexes[j]
+						//startElseIfIndexes = startElseIfIndexes[j+1:]
+
+						//fmt.Println(startElseIfContentIndexes)
+						startElseIfContentIndex = startElseIfContentIndexes[j-1]
+						//startElseIfContentIndex := startElseIfContentIndexes[j-1]
+
+						//endElseIfContentIndex := endIfContentIndex
+						if len(startElseIfIndexes) >= j {
+							// If there are more else if conditions, the end of the current is the start of the next
+							//fmt.Println(j)
+							//fmt.Println(startElseIfIndexes)
+							endElseIfContentIndex = startElseIfIndexes[j]
+							//fmt.Println(endElseIfContentIndex)
+							//fmt.Println(len(modifiedMarkup))
+							//fmt.Println(modifiedMarkup)
+							//fmt.Println(startElseIndexes)
+						}
+						/*
+							} else if len(startElseIndexes) > 0 {
+								//fmt.Println(startElseIfIndexes)
+								endElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
+								fmt.Println("ELSE")
+								fmt.Println(endElseIfContentIndex)
+							}
+							currentElseIfContent := modifiedMarkup[startElseIfContentIndex:endElseIfContentIndex]
+							modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
+						*/
+					}
+				}
+				if !elseIfWasTrue && len(startElseIndexes) > 0 {
+					fmt.Println("Else was used")
+					endElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
 
 				}
-			*/
+				currentElseIfContent := modifiedMarkup[startElseIfContentIndex:endElseIfContentIndex]
+				modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
+				//modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + modifiedMarkup[i+len("{/if}")-difference:]
+			}
 		}
 		difference = len(markup) - len(modifiedMarkup)
 	}
