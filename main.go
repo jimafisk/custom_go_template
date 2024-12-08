@@ -530,10 +530,12 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			if len(startElseIfIndexes) > 0 {
 				endIfContentIndex = startElseIfIndexes[0]
 			} else if len(startElseIndexes) > 0 {
+				fmt.Println(startElseIndexes)
 				endIfContentIndex = startElseIndexes[0]
 			}
 
-			currentIfContent := modifiedMarkup[startIfContentIndex:endIfContentIndex]
+			currentIfContent := modifiedMarkup[startIfContentIndex : endIfContentIndex-difference]
+			fmt.Println(currentIfContent)
 
 			startOpenIfIndex := startOpenIfIndexes[len(startOpenIfIndexes)-1]
 			startOpenIfIndexes = startOpenIfIndexes[:len(startOpenIfIndexes)-1]
@@ -541,6 +543,12 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			fmt.Println(currentIfCondition)
 			if isBoolAndTrue(evalJS(currentIfCondition, props)) {
 				fmt.Println("If was true")
+				/*
+					if len(startElseIndexes) > 0 {
+						// Need to clean up {else} as well
+						startCloseIfIndex += len("{else}")
+					}
+				*/
 				modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
 			} else {
 				elseIfWasTrue := false
