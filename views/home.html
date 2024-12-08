@@ -27,7 +27,7 @@ let comp = "mycomp";
 			<div>Random div</div>
 			{if name === "John"}
 				<div id="praise">John is great</div>
-				{if age > .00000000000001}
+				{if age > .0000000000000000001}
 					<div>Good job</div>
 				{/if}
 			{else}
@@ -35,13 +35,13 @@ let comp = "mycomp";
 			{/if}
 			<div>went ok</div>
 			{if age > 0}
-				<Age {name} {age} />
+				<Age name={"Bill"} {age} />
 				<Todos number={age + 5} />
 
-				<Age {name} age={50} />
+				<Age name={"Bo"} age={50} />
 				<Todos number={14} />
 
-				<Age {name} age={201} />
+				<Age name={"Baggins"} age={201} />
 				<Todos number={7 - 2} />
 			{/if}
 

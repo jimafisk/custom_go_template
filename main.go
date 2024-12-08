@@ -464,8 +464,6 @@ func evalJS(jsCode string, props map[string]any) any {
 
 // FindIfConditions finds if-conditions in a given string
 func FindIfConditions(markup string, props map[string]any) (string, error) {
-	modifiedMarkup := markup
-
 	var ifConditions []string
 	var elseIfConditions []string
 
@@ -476,8 +474,6 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 	var startIfContentIndexes []int
 	var startElseIfContentIndexes []int
 	var startElseContentIndexes []int
-
-	difference := 0
 
 	for i := 0; i < len(markup); i++ {
 		if strings.HasPrefix(markup[i:], "{if ") {
@@ -530,33 +526,28 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			if len(startElseIfIndexes) > 0 {
 				endIfContentIndex = startElseIfIndexes[0]
 			} else if len(startElseIndexes) > 0 {
-				fmt.Println(startElseIndexes)
 				endIfContentIndex = startElseIndexes[0]
 			}
 
-			currentIfContent := modifiedMarkup[startIfContentIndex : endIfContentIndex-difference]
-			fmt.Println(currentIfContent)
+			currentIfContent := markup[startIfContentIndex:endIfContentIndex]
 
 			startOpenIfIndex := startOpenIfIndexes[len(startOpenIfIndexes)-1]
 			startOpenIfIndexes = startOpenIfIndexes[:len(startOpenIfIndexes)-1]
 
-			fmt.Println(currentIfCondition)
 			if isBoolAndTrue(evalJS(currentIfCondition, props)) {
+				fmt.Println(currentIfCondition)
 				fmt.Println("If was true")
-				/*
-					if len(startElseIndexes) > 0 {
-						// Need to clean up {else} as well
-						startCloseIfIndex += len("{else}")
-					}
-				*/
-				modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
+				fmt.Println(currentIfContent)
+				markup = markup[:startOpenIfIndex] + currentIfContent + markup[startCloseIfIndex+len("{/if}"):]
 			} else {
 				elseIfWasTrue := false
 				//startElseIfContentIndex := endIfContentIndex // Assume no conditions met + no else clause
 				endElseIfContentIndex := endIfContentIndex
 				for j, elseIfCondition := range elseIfConditions {
+					fmt.Println(markup)
 					fmt.Println(elseIfCondition)
 					if isBoolAndTrue(evalJS(elseIfCondition, props)) && !elseIfWasTrue {
+						fmt.Println(elseIfCondition)
 						fmt.Println(props)
 						fmt.Println("Else If was true")
 						elseIfWasTrue = true
@@ -569,28 +560,28 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 							// Last if else statement is true and there's an else after
 							endElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
 						}
-						currentElseIfContent := modifiedMarkup[startElseIfContentIndex:endElseIfContentIndex]
-						modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
+						currentElseIfContent := markup[startElseIfContentIndex:endElseIfContentIndex]
+						fmt.Println(currentElseIfContent)
+						markup = markup[:startOpenIfIndex] + currentElseIfContent + markup[startCloseIfIndex+len("{/if}"):]
 					}
 				}
 				if !elseIfWasTrue && len(startElseIndexes) > 0 {
 					fmt.Println("Else was used")
 					startElseContentIndex := startElseContentIndexes[len(startElseContentIndexes)-1]
-					currentElseContent := modifiedMarkup[startElseContentIndex:startCloseIfIndex]
-					modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
+					currentElseContent := markup[startElseContentIndex:startCloseIfIndex]
+					fmt.Println(currentElseContent)
+					markup = markup[:startOpenIfIndex] + currentElseContent + markup[startCloseIfIndex+len("{/if}"):]
 				}
 			}
-			fmt.Println(modifiedMarkup)
 			startElseIfIndexes = nil
 			startElseIfContentIndexes = nil
 			startElseIndexes = nil
 			startElseContentIndexes = nil
 			elseIfConditions = nil
 		}
-		difference = len(markup) - len(modifiedMarkup)
 	}
 
-	return modifiedMarkup, nil
+	return markup, nil
 }
 
 func renderConditions(markup string, props map[string]any) string {
