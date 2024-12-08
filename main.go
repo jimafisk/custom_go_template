@@ -545,7 +545,7 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 				markup = modifiedMarkup
 			} else {
 				elseIfWasTrue := false
-				//startElseIfContentIndex := endIfContentIndex // Assume no conditions met + no else clause
+				startElseIfContentIndex := startIfContentIndex // Assume no conditions met + no else clause
 				endElseIfContentIndex := endIfContentIndex
 				for j, elseIfCondition := range elseIfConditions {
 					fmt.Println(markup)
@@ -555,10 +555,12 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 						fmt.Println(props)
 						fmt.Println("Else If was true")
 						elseIfWasTrue = true
-						startElseIfContentIndex := startElseIfContentIndexes[j-1]
-						if len(startElseIfIndexes) >= j {
-							// If there are more else if conditions, the end of the current is the start of the next
-							endElseIfContentIndex = startElseIfIndexes[j]
+						if j > 0 {
+							startElseIfContentIndex = startElseIfContentIndexes[j]
+						}
+						if len(startElseIfIndexes) > j {
+							// If there are more else if conditions, the start of the next one is the end of the current one
+							endElseIfContentIndex = startElseIfIndexes[j+1]
 						}
 						if j == len(elseIfConditions) && len(startElseIndexes) > 0 {
 							// Last if else statement is true and there's an else after

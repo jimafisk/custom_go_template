@@ -13,8 +13,12 @@ prop age;
 <div class="container">
 	<div>{name}'s age is: {age}</div>
 
-	{if age > 200}
+	{if age > 300}
+		<div class="dust">Dust (300+)</div>
+	{else if age > 200}
 		<div class="dead">Dead (200+)</div>
+	{else if age > 90}
+		<div class="old">Wow (90+)</div>
 	{else if age > 80}
 		<div class="old">Well done (80+)</div>
 	{else if age > 40}
