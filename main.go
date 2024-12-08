@@ -507,7 +507,6 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			startElseIfContentIndex := endElseIfIndex + 1
 			startElseIfContentIndexes = append(startElseIfContentIndexes, startElseIfContentIndex)
 		} else if strings.HasPrefix(markup[i:], "{else}") {
-			fmt.Println("ELSE FOUND")
 			startElseIndex := i
 			startElseIndexes = append(startElseIndexes, startElseIndex)
 			endElseIndex := startElseIndex + len("{else}")
@@ -527,7 +526,6 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			if len(startElseIfIndexes) > 0 {
 				endIfContentIndex = startElseIfIndexes[0] - 1
 			} else if len(startElseIndexes) > 0 {
-				fmt.Println("RUNNING ELSE")
 				endIfContentIndex = startElseIndexes[0] - 1
 			}
 
@@ -537,27 +535,16 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			startOpenIfIndexes = startOpenIfIndexes[:len(startOpenIfIndexes)-1]
 
 			if isBoolAndTrue(evalJS(currentIfCondition, props)) {
-				fmt.Println(currentIfCondition)
-				fmt.Println("If was true")
-				fmt.Println(currentIfContent)
 				modifiedMarkup := markup[:startOpenIfIndex] + currentIfContent + markup[startCloseIfIndex+len("{/if}"):]
 				i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
 				markup = modifiedMarkup
 			} else {
 				elseIfWasTrue := false
-				startElseIfContentIndex := startIfContentIndex // Assume no conditions met + no else clause
 				endElseIfContentIndex := endIfContentIndex
 				for j, elseIfCondition := range elseIfConditions {
-					fmt.Println(markup)
-					fmt.Println(elseIfCondition)
 					if isBoolAndTrue(evalJS(elseIfCondition, props)) && !elseIfWasTrue {
-						fmt.Println(elseIfCondition)
-						fmt.Println(props)
-						fmt.Println("Else If was true")
 						elseIfWasTrue = true
-						if j > 0 {
-							startElseIfContentIndex = startElseIfContentIndexes[j]
-						}
+						startElseIfContentIndex := startElseIfContentIndexes[j]
 						if len(startElseIfIndexes) > j {
 							// If there are more else if conditions, the start of the next one is the end of the current one
 							endElseIfContentIndex = startElseIfIndexes[j+1]
@@ -567,17 +554,14 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 							endElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
 						}
 						currentElseIfContent := markup[startElseIfContentIndex:endElseIfContentIndex]
-						fmt.Println(currentElseIfContent)
 						modifiedMarkup := markup[:startOpenIfIndex] + currentElseIfContent + markup[startCloseIfIndex+len("{/if}"):]
 						i -= len(markup) - len(modifiedMarkup)
 						markup = modifiedMarkup
 					}
 				}
 				if !elseIfWasTrue && len(startElseIndexes) > 0 {
-					fmt.Println("Else was used")
 					startElseContentIndex := startElseContentIndexes[len(startElseContentIndexes)-1]
 					currentElseContent := markup[startElseContentIndex:startCloseIfIndex]
-					fmt.Println(currentElseContent)
 					modifiedMarkup := markup[:startOpenIfIndex] + currentElseContent + markup[startCloseIfIndex+len("{/if}"):]
 					i -= len(markup) - len(modifiedMarkup)
 					markup = modifiedMarkup
