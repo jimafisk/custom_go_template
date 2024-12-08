@@ -542,14 +542,9 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			if isBoolAndTrue(evalJS(currentIfCondition, props)) {
 				fmt.Println("If was true")
 				modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
-				startElseIfIndexes = nil
-				startElseIfContentIndexes = nil
-				startElseIndexes = nil
-				startElseContentIndexes = nil
-				elseIfConditions = nil
 			} else {
 				elseIfWasTrue := false
-				startElseIfContentIndex := endIfContentIndex // Assume no conditions met + no else clause
+				//startElseIfContentIndex := endIfContentIndex // Assume no conditions met + no else clause
 				endElseIfContentIndex := endIfContentIndex
 				for j, elseIfCondition := range elseIfConditions {
 					fmt.Println(elseIfCondition)
@@ -557,7 +552,7 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 						fmt.Println(props)
 						fmt.Println("Else If was true")
 						elseIfWasTrue = true
-						startElseIfContentIndex = startElseIfContentIndexes[j-1]
+						startElseIfContentIndex := startElseIfContentIndexes[j-1]
 						if len(startElseIfIndexes) >= j {
 							// If there are more else if conditions, the end of the current is the start of the next
 							endElseIfContentIndex = startElseIfIndexes[j]
@@ -567,22 +562,22 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 							endElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
 						}
 						currentElseIfContent := modifiedMarkup[startElseIfContentIndex:endElseIfContentIndex]
-						modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseIfContent + modifiedMarkup[endElseIfContentIndex+len("{/if}")-difference:]
+						modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseIfContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
 					}
 				}
 				if !elseIfWasTrue && len(startElseIndexes) > 0 {
 					fmt.Println("Else was used")
-					//endElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
-					//startElseIfContentIndex = startElseIndexes[len(startElseIndexes)-1]
-					//startElseIfContentIndex = startElseContentIndexes[len(startElseContentIndexes)-1]
 					startElseContentIndex := startElseContentIndexes[len(startElseContentIndexes)-1]
 					currentElseContent := modifiedMarkup[startElseContentIndex:startCloseIfIndex]
 					modifiedMarkup = modifiedMarkup[:startOpenIfIndex] + currentElseContent + modifiedMarkup[startCloseIfIndex+len("{/if}")-difference:]
-					fmt.Println(startElseIfContentIndex)
-					fmt.Println(endElseIfContentIndex)
-
 				}
 			}
+			fmt.Println(modifiedMarkup)
+			startElseIfIndexes = nil
+			startElseIfContentIndexes = nil
+			startElseIndexes = nil
+			startElseContentIndexes = nil
+			elseIfConditions = nil
 		}
 		difference = len(markup) - len(modifiedMarkup)
 	}
