@@ -23,10 +23,10 @@ prop age;
 		<div class="old">Well done (80+)</div>
 	{else if age > 40}
 		<div class="mid">Over the hill (40+)</div>
-	{else if age > 21}
+	{else if age >= 21}
 		<div class="young">Can drink (21+)</div>
 	{else}
-		<div class="new">Just a baby</div>
+		<div class="new">Just a baby (Under 21)</div>
 	{/if}
 
 	<Double {age} text={age > 100 ? "yoooo that's old" : ""} />
