@@ -110,6 +110,14 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []sco
 	for _, node := range nodes {
 		node, scopedElements = traverse(node, scopedElements, comp_props)
 
+		if len(comp_props) > 0 {
+			attr := html.Attribute{
+				Key: "x-data",
+				Val: strings.ReplaceAll(anyToString(comp_props), "\"", "'"),
+			}
+			node.Attr = append(node.Attr, attr)
+		}
+
 		buf := &strings.Builder{}
 		err := html.Render(buf, node)
 		if err != nil {
@@ -128,7 +136,27 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []sco
 func traverse(node *html.Node, scopedElements []scopedElement, props map[string]any) (*html.Node, []scopedElement) {
 	var traverse func(*html.Node)
 	traverse = func(node *html.Node) {
+		if node.Type == html.ElementNode && node.Data == "html" {
+			if len(props) > 0 {
+				attr := html.Attribute{
+					Key: "x-data",
+					Val: strings.ReplaceAll(anyToString(props), "\"", "'"),
+					//Val: strings.ReplaceAll(strings.Trim(anyToString(props), "{}"), "\"", "'"),
+				}
+				node.Attr = append(node.Attr, attr)
+				//fmt.Println(node.Attr)
+			}
+		}
 		if node.Type == html.TextNode {
+			if strings.Contains(node.Data, "{") && strings.Contains(node.Data, "}") {
+				//fmt.Println(node.Data)
+				attr := html.Attribute{
+					Key: "x-text",
+					Val: "`" + strings.ReplaceAll(strings.ReplaceAll(node.Data, "{", "${"), "\"", "'") + "`",
+					//Val: "`" + strings.ReplaceAll(node.Data, "{", "${") + "`",
+				}
+				node.Parent.Attr = append(node.Parent.Attr, attr)
+			}
 			node.Data = evalAllBrackets(node.Data, props)
 		}
 		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
@@ -164,7 +192,9 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 					}
 				}
 				if strings.Contains(attr.Val, "{") && strings.Contains(attr.Val, "}") {
-					node.Attr[i].Val = evalAllBrackets(attr.Val, props)
+					if attr.Key != "x-text" && attr.Key != "x-data" {
+						node.Attr[i].Val = evalAllBrackets(attr.Val, props)
+					}
 				}
 			}
 
@@ -767,6 +797,20 @@ func formatArray(value any) string {
 	return "[" + strings.Join(elements, ", ") + "]"
 }
 
+func formatObject(value any) string {
+	val := reflect.ValueOf(value)
+	if val.Kind() != reflect.Map {
+		return ""
+	}
+	var pairs []string
+	for _, key := range val.MapKeys() {
+		value := val.MapIndex(key)
+		//pairs = append(pairs, anyToString(key.Interface())+": "+anyToString(value.Interface()))
+		pairs = append(pairs, fmt.Sprintf("%s", key.Interface())+": "+anyToString(value.Interface()))
+	}
+	return "{" + strings.Join(pairs, ", ") + "}"
+}
+
 func formatElement(value any) string {
 	switch v := value.(type) {
 	case string:
@@ -789,6 +833,8 @@ func anyToString(value any) string {
 	switch val.Kind() {
 	case reflect.Array, reflect.Slice:
 		return formatArray(value)
+	case reflect.Map:
+		return formatObject(value)
 	default:
 		return formatElement(value)
 	}
