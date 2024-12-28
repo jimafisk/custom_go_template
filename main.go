@@ -91,7 +91,7 @@ func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
 	return markup, scopedElements
 }
 
-func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []scopedElement) {
+func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[string]any) (string, []scopedElement) {
 	// We scope components differently than the full document
 	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
 	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
@@ -113,7 +113,9 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any) (string, []sco
 		if len(comp_props) > 0 {
 			attr := html.Attribute{
 				Key: "x-data",
-				Val: strings.ReplaceAll(anyToString(comp_props), "\"", "'"),
+				//Val: strings.ReplaceAll(anyToString(comp_data), "\"", "'"),
+				//Val: anyToString(comp_data),
+				Val: makeGetter(comp_data),
 			}
 			node.Attr = append(node.Attr, attr)
 		}
@@ -141,19 +143,15 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 				attr := html.Attribute{
 					Key: "x-data",
 					Val: strings.ReplaceAll(anyToString(props), "\"", "'"),
-					//Val: strings.ReplaceAll(strings.Trim(anyToString(props), "{}"), "\"", "'"),
 				}
 				node.Attr = append(node.Attr, attr)
-				//fmt.Println(node.Attr)
 			}
 		}
 		if node.Type == html.TextNode {
 			if strings.Contains(node.Data, "{") && strings.Contains(node.Data, "}") {
-				//fmt.Println(node.Data)
 				attr := html.Attribute{
 					Key: "x-text",
 					Val: "`" + strings.ReplaceAll(strings.ReplaceAll(node.Data, "{", "${"), "\"", "'") + "`",
-					//Val: "`" + strings.ReplaceAll(node.Data, "{", "${") + "`",
 				}
 				node.Parent.Attr = append(node.Parent.Attr, attr)
 			}
@@ -705,14 +703,16 @@ func getComponents(fence string) (string, []Component) {
 	return fence, components
 }
 
-func getCompArgs(comp_args []string, props map[string]any) map[string]any {
+func getCompArgs(comp_args []string, props map[string]any) (map[string]any, map[string]any) {
 	comp_props := map[string]any{}
+	comp_data := map[string]any{}
 	for _, comp_arg := range comp_args {
 		comp_arg = strings.TrimSpace(comp_arg)
 		if strings.HasPrefix(comp_arg, "{") && strings.HasSuffix(comp_arg, "}") {
 			prop_name := strings.Trim(comp_arg, "{}")
 			prop_value := props[prop_name]
 			comp_props[prop_name] = prop_value
+			comp_data[prop_name] = prop_name
 		}
 		if strings.Contains(comp_arg, "={") && strings.HasSuffix(comp_arg, "}") {
 			nameEndPos := strings.IndexRune(comp_arg, '=')
@@ -723,9 +723,10 @@ func getCompArgs(comp_args []string, props map[string]any) map[string]any {
 			prop_value := evalJS(comp_arg[valueStartPos+1:valueEndPos], props)
 
 			comp_props[prop_name] = prop_value
+			comp_data[prop_name] = comp_arg[valueStartPos+1 : valueEndPos]
 		}
 	}
-	return comp_props
+	return comp_props, comp_data
 }
 
 func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
@@ -736,11 +737,11 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		for _, match := range matches {
 			if len(match) > 1 {
 				comp_args := strings.SplitAfter(match[1], "}")
-				comp_props := getCompArgs(comp_args, props)
+				comp_props, comp_data := getCompArgs(comp_args, props)
 				// Recursively render imports
 				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
-				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props)
+				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data)
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 				// Add scoped classes to js
@@ -766,11 +767,11 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 				comp_path = evalAllBrackets(comp_path, props)
 			}
 			comp_args := strings.SplitAfter(match[2], "}")
-			comp_props := getCompArgs(comp_args, props)
+			comp_props, comp_data := getCompArgs(comp_args, props)
 			comp_path = strings.Trim(comp_path, "\"'`") // Remove backticks, single and double quotes
 			comp_markup, comp_script, comp_style := Render(comp_path, comp_props)
 			// Create scoped classes and add to html
-			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props)
+			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data)
 			// Add scoped classes to css
 			comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
@@ -805,7 +806,6 @@ func formatObject(value any) string {
 	var pairs []string
 	for _, key := range val.MapKeys() {
 		value := val.MapIndex(key)
-		//pairs = append(pairs, anyToString(key.Interface())+": "+anyToString(value.Interface()))
 		pairs = append(pairs, fmt.Sprintf("%s", key.Interface())+": "+anyToString(value.Interface()))
 	}
 	return "{" + strings.Join(pairs, ", ") + "}"
@@ -838,6 +838,15 @@ func anyToString(value any) string {
 	default:
 		return formatElement(value)
 	}
+}
+
+func makeGetter(comp_data map[string]any) string {
+	var comp_data_str string
+	for name, value := range comp_data {
+		value_str := strings.ReplaceAll(fmt.Sprintf("%s", value), "\"", "'")
+		comp_data_str += "get " + name + "() { return " + value_str + " },"
+	}
+	return "{" + comp_data_str + "}"
 }
 
 func isBoolAndTrue(value any) bool {

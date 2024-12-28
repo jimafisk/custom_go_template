@@ -55,11 +55,10 @@ let comp = "mycomp";
 			<div id="load_cms"></div>
 			<h1>{salutation} {name}</h1>
 			<span>{test}</span>
-			<div>Random div</div>
 			{if name === "John"}
-				<div id="praise">John is great</div>
-				{if age > .0000000000000000001}
-					<div>Good job</div>
+				<div id="praise">{name} is great</div>
+				{if age > 1}
+					<div>Has been born</div>
 				{/if}
 			{else}
 				<div id="praise">Not sure who you are, but you're probably great</div>
@@ -68,17 +67,13 @@ let comp = "mycomp";
 				<Age name={"Bill"} {age} />
 				<Todos number={age + 5} />
 
-				<Age name={"Bo"} age={50} />
+				<Age name={"Bo"} age={age + 50} />
 				<Todos number={14} />
 
 				<Age name={"Baggins"} age={201} />
 				<Todos number={7 - 2} />
 			{/if}
 
-			{for let a of [44, 99, 2220]}
-			{a}
-				<="./views/mycomp.html" age={77} />
-			{/for}
 			<="./views/mycomp.html" {age} />
 			<={path} />
 			<="./views/{comp}.html" age={age + 1} />
