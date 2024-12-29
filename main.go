@@ -113,8 +113,6 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[
 		if len(comp_props) > 0 {
 			attr := html.Attribute{
 				Key: "x-data",
-				//Val: strings.ReplaceAll(anyToString(comp_data), "\"", "'"),
-				//Val: anyToString(comp_data),
 				Val: makeGetter(comp_data),
 			}
 			node.Attr = append(node.Attr, attr)
@@ -190,7 +188,11 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 					}
 				}
 				if strings.Contains(attr.Val, "{") && strings.Contains(attr.Val, "}") {
-					if attr.Key != "x-text" && attr.Key != "x-data" {
+					if attr.Key != "x-text" && attr.Key != "x-data" && !strings.HasPrefix(attr.Key, ":") {
+						node.Attr = append(node.Attr, html.Attribute{
+							Key: ":" + attr.Key,
+							Val: "`" + strings.ReplaceAll(strings.ReplaceAll(attr.Val, "{", "${"), "\"", "'") + "`",
+						})
 						node.Attr[i].Val = evalAllBrackets(attr.Val, props)
 					}
 				}
