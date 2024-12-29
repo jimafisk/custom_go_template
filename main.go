@@ -843,7 +843,9 @@ func anyToString(value any) string {
 func makeGetter(comp_data map[string]any) string {
 	var comp_data_str string
 	for name, value := range comp_data {
-		value_str := strings.ReplaceAll(fmt.Sprintf("%s", value), "\"", "'")
+		value_str := fmt.Sprintf("%s", value)
+		value_str = strings.ReplaceAll(value_str, "'", "\\'") // escape single quotes
+		value_str = strings.ReplaceAll(value_str, "\"", "'")  // change double quotes to single
 		comp_data_str += "get " + name + "() { return " + value_str + " },"
 	}
 	return "{" + comp_data_str + "}"
