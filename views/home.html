@@ -27,13 +27,15 @@ let comp = "mycomp";
 			if (Object.hasOwnProperty.call(obj, key)) {
 				const input = document.createElement('input');
 				input.type = 'text';
+				let attribute = "x-model";
+				if (typeof obj[key] === 'number') {
+					input.type = 'number';
+					attribute += ".number";
+				}
 				input.id = key;
 				input.name = key;
 				input.placeholder = key;
-				input.setAttribute('x-model', key);
-				//input.setAttribute('x-bind:value', key);
-				//input.setAttribute('x-bind:'+key, obj[key]);
-				//input.setAttribute('x-bind:'+key, "'something'");
+				input.setAttribute(attribute, key);
 				const label = document.createElement('label');
 				label.htmlFor = key;
 				label.textContent = key;
