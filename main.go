@@ -843,12 +843,34 @@ func anyToString(value any) string {
 }
 
 func makeGetter(comp_data map[string]any) string {
-	var comp_data_str string
-	for name, value := range comp_data {
-		value_str := fmt.Sprintf("%s", value)
+	//var comp_data_str string
+	comp_data_str := "_fence: `age = age * 2;`," // TODO: fix temp hardcode
+
+	params := make([]string, 0, len(comp_data))
+	args := make([]string, 0, len(comp_data))
+	for k, v := range comp_data {
+		params = append(params, k)
+
+		value_str := fmt.Sprintf("%s", v)
 		value_str = strings.ReplaceAll(value_str, "'", "\\'") // escape single quotes
 		value_str = strings.ReplaceAll(value_str, "\"", "'")  // change double quotes to single
-		comp_data_str += "get " + name + "() { return " + value_str + " },"
+		args = append(args, value_str)
+	}
+	params_str := strings.Join(params, ", ")
+	args_str := strings.Join(args, ", ")
+
+	i := 0
+	//for name, value := range comp_data {
+	for name := range comp_data {
+		//value_str := fmt.Sprintf("%s", value)
+		//value_str = strings.ReplaceAll(value_str, "'", "\\'") // escape single quotes
+		//value_str = strings.ReplaceAll(value_str, "\"", "'")  // change double quotes to single
+		//new_args := args
+		//new_args[i] = value_str
+		//args_str := strings.Join(new_args, ", ")
+		comp_data_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
+		//comp_data_str += "get " + name + "() { return " + value_str + " },"
+		i++
 	}
 	return "{" + comp_data_str + "}"
 }
