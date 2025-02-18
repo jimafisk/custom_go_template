@@ -28,7 +28,7 @@ type Component struct {
 }
 
 // Render renders the template with the given data
-func Render(path string, props map[string]any) (string, string, string) {
+func Render(path string, props map[string]any) (string, string, string, string) {
 
 	c, err := os.ReadFile(path)
 	if err != nil {
@@ -41,7 +41,7 @@ func Render(path string, props map[string]any) (string, string, string) {
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(fence)
 	// Set the prop to the value that's passed in
-	fence = setProps(fence, props)
+	fence, fence_logic := setProps(fence, props)
 	// Get list of all variables declared in fence
 	allVars := getAllVars(fence)
 	// Run the JS in Goja to get the computed values for props
@@ -64,7 +64,7 @@ func Render(path string, props map[string]any) (string, string, string) {
 	}
 	script = ast.JSString()
 
-	return markup, script, style
+	return markup, script, style, fence_logic
 }
 
 type scopedElement struct {
@@ -91,7 +91,7 @@ func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
 	return markup, scopedElements
 }
 
-func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[string]any) (string, []scopedElement) {
+func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[string]any, fence_logic string) (string, []scopedElement) {
 	// We scope components differently than the full document
 	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
 	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
@@ -113,7 +113,7 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[
 		if len(comp_props) > 0 {
 			attr := html.Attribute{
 				Key: "x-data",
-				Val: makeGetter(comp_data),
+				Val: makeGetter(comp_data, fence_logic),
 			}
 			node.Attr = append(node.Attr, attr)
 		}
@@ -421,16 +421,26 @@ func templateParts(template string) (string, string, string, string) {
 	return markup, fence, script, style
 }
 
-func setProps(fence string, props map[string]any) string {
+func setProps(fence string, props map[string]any) (string, string) {
+	fence_logic := fence
 	for name, value := range props {
 		reProp := regexp.MustCompile(fmt.Sprintf(`prop (%s)(\s?=\s?(.*?))?;`, name))
+		fence_logic = reProp.ReplaceAllString(fence_logic, "")
 		fence = reProp.ReplaceAllString(fence, "let "+name+" = "+anyToString(value)+";")
 	}
 	// Convert prop to let for unpassed props
 	rePropDefaults := regexp.MustCompile(`prop (.*?);`)
+	fence_logic = rePropDefaults.ReplaceAllString(fence_logic, "")
 	fence = rePropDefaults.ReplaceAllString(fence, "let $1;") // Works with equals or not
 
-	return fence
+	reComments := regexp.MustCompile(`//.*`)
+	fence_logic = reComments.ReplaceAllString(fence_logic, "")
+	fence_logic = strings.TrimSpace(fence_logic)
+	fence_logic = strings.ReplaceAll(fence_logic, "\n", "")
+	fence_logic = strings.ReplaceAll(fence_logic, "'", "\\'") // escape single quotes
+	fence_logic = strings.ReplaceAll(fence_logic, "\"", "'")  // change double quotes to single
+
+	return fence, fence_logic
 }
 
 func getAllVars(fence string) []string {
@@ -741,9 +751,9 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 				comp_args := strings.SplitAfter(match[1], "}")
 				comp_props, comp_data := getCompArgs(comp_args, props)
 				// Recursively render imports
-				comp_markup, comp_script, comp_style := Render(component.Path, comp_props)
+				comp_markup, comp_script, comp_style, fence_logic := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
-				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data)
+				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data, fence_logic)
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 				// Add scoped classes to js
@@ -771,9 +781,9 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			comp_args := strings.SplitAfter(match[2], "}")
 			comp_props, comp_data := getCompArgs(comp_args, props)
 			comp_path = strings.Trim(comp_path, "\"'`") // Remove backticks, single and double quotes
-			comp_markup, comp_script, comp_style := Render(comp_path, comp_props)
+			comp_markup, comp_script, comp_style, fence_logic := Render(comp_path, comp_props)
 			// Create scoped classes and add to html
-			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data)
+			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data, fence_logic)
 			// Add scoped classes to css
 			comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
@@ -842,16 +852,16 @@ func anyToString(value any) string {
 	}
 }
 
-func makeGetter(comp_data map[string]any) string {
+func makeGetter(comp_data map[string]any, fence_logic string) string {
 	//var comp_data_str string
-	comp_data_str := "_fence: `age = age * 2;`," // TODO: fix temp hardcode
+	comp_data_str := fmt.Sprintf("_fence: `%s`,", fence_logic)
 
 	params := make([]string, 0, len(comp_data))
 	args := make([]string, 0, len(comp_data))
 	for k, v := range comp_data {
 		params = append(params, k)
 
-		value_str := fmt.Sprintf("%s", v)
+		value_str := fmt.Sprintf("%s", v)                     // Any to string
 		value_str = strings.ReplaceAll(value_str, "'", "\\'") // escape single quotes
 		value_str = strings.ReplaceAll(value_str, "\"", "'")  // change double quotes to single
 		args = append(args, value_str)
@@ -860,16 +870,8 @@ func makeGetter(comp_data map[string]any) string {
 	args_str := strings.Join(args, ", ")
 
 	i := 0
-	//for name, value := range comp_data {
 	for name := range comp_data {
-		//value_str := fmt.Sprintf("%s", value)
-		//value_str = strings.ReplaceAll(value_str, "'", "\\'") // escape single quotes
-		//value_str = strings.ReplaceAll(value_str, "\"", "'")  // change double quotes to single
-		//new_args := args
-		//new_args[i] = value_str
-		//args_str := strings.Join(new_args, ", ")
 		comp_data_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
-		//comp_data_str += "get " + name + "() { return " + value_str + " },"
 		i++
 	}
 	return "{" + comp_data_str + "}"
@@ -885,7 +887,7 @@ func isBoolAndTrue(value any) bool {
 func main() {
 	// Render the template with data
 	props := map[string]any{"name": "John", "age": 2, "animals": []string{"cat", "dog", "pig"}}
-	markup, script, style := Render("views/home.html", props)
+	markup, script, style, _ := Render("views/home.html", props)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
 	os.WriteFile("./public/index.html", []byte(markup), fs.ModePerm)
