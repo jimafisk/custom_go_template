@@ -433,14 +433,21 @@ func setProps(fence string, props map[string]any) (string, string) {
 	fence_logic = rePropDefaults.ReplaceAllString(fence_logic, "")
 	fence = rePropDefaults.ReplaceAllString(fence, "let $1;") // Works with equals or not
 
-	reComments := regexp.MustCompile(`//.*`)
-	fence_logic = reComments.ReplaceAllString(fence_logic, "")
-	fence_logic = strings.TrimSpace(fence_logic)
-	fence_logic = strings.ReplaceAll(fence_logic, "\n", "")
-	fence_logic = strings.ReplaceAll(fence_logic, "'", "\\'") // escape single quotes
-	fence_logic = strings.ReplaceAll(fence_logic, "\"", "'")  // change double quotes to single
+	fence_logic = makeAttrStr(fence_logic)
 
 	return fence, fence_logic
+}
+
+func makeAttrStr(str string) string {
+	reComments := regexp.MustCompile(`//.*`)
+	str = reComments.ReplaceAllString(str, "") // Remove comments before putting on single line
+
+	str = strings.TrimSpace(str)              // Remove leading and trailing whitespace
+	str = strings.ReplaceAll(str, "\n", "")   // Remove all tabs to put on single line
+	str = strings.ReplaceAll(str, "'", "\\'") // escape single quotes
+	str = strings.ReplaceAll(str, "\"", "'")  // change double quotes to single
+
+	return str
 }
 
 func getAllVars(fence string) []string {
@@ -853,7 +860,6 @@ func anyToString(value any) string {
 }
 
 func makeGetter(comp_data map[string]any, fence_logic string) string {
-	//var comp_data_str string
 	comp_data_str := fmt.Sprintf("_fence: `%s`,", fence_logic)
 
 	params := make([]string, 0, len(comp_data))
@@ -861,9 +867,8 @@ func makeGetter(comp_data map[string]any, fence_logic string) string {
 	for k, v := range comp_data {
 		params = append(params, k)
 
-		value_str := fmt.Sprintf("%s", v)                     // Any to string
-		value_str = strings.ReplaceAll(value_str, "'", "\\'") // escape single quotes
-		value_str = strings.ReplaceAll(value_str, "\"", "'")  // change double quotes to single
+		value_str := fmt.Sprintf("%s", v) // Any to string
+		value_str = makeAttrStr(value_str)
 		args = append(args, value_str)
 	}
 	params_str := strings.Join(params, ", ")
