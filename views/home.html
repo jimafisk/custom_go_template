@@ -17,44 +17,13 @@ let path = "./views/mycomp.html";
 let comp = "mycomp";
 ---
 
-<script>
-	let htmlEl = document.getElementsByTagName("html")[0];
-	let cms_fields_str = htmlEl.getAttribute("x-data");
-	let cms_fields = eval("(" + cms_fields_str + ")");
-
-	function createInputs(obj, container) {
-		for (const key in obj) {
-			if (Object.hasOwnProperty.call(obj, key)) {
-				const input = document.createElement('input');
-				input.type = 'text';
-				let attribute = "x-model";
-				if (typeof obj[key] === 'number') {
-					input.type = 'number';
-					attribute += ".number";
-				}
-				input.id = key;
-				input.name = key;
-				input.placeholder = key;
-				input.setAttribute(attribute, key);
-				const label = document.createElement('label');
-				label.htmlFor = key;
-				label.textContent = key;
-				container.appendChild(label);
-				container.appendChild(input);
-				container.appendChild(document.createElement('br'));
-			}
-		}
-	}
-	const cms = document.getElementById('load_cms');
-	createInputs(cms_fields, cms);
-</script>
-
 <!DOCTYPE html>
 <html lang="en">
 	<Head />
 	<body>
 		<main>
-			<div id="load_cms"></div>
+			<div id="plenti_cms"></div>
+			<button id="toggle_plenti_cms">Toggle CMS</button>
 			<h1>{salutation} {name}</h1>
 			<span>{test}</span>
 			{if name === "John"}
@@ -99,7 +68,7 @@ let comp = "mycomp";
 
 <style>
 	h1 {
-		color: yellow;
+		color: orange;
 	}
 	body #praise {
 		font-size: 3rem;

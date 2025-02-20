@@ -1,0 +1,51 @@
+/* Style for the menu container */
+#plenti_cms {
+    position: fixed;
+    top: 0;
+    right: -300px;
+    /* Start off-screen */
+    width: 300px;
+    height: 100vh;
+    background-color: #f4f4f4;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    transition: right 0.3s ease-in-out;
+    padding: 20px;
+    box-sizing: border-box;
+    z-index: 1000;
+}
+
+/* Style for the menu when it's visible */
+#plenti_cms.menu-visible {
+    right: 0;
+    /* Slide into view */
+}
+
+/* Style for the toggle button */
+#toggle_plenti_cms {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1001;
+    padding: 10px 20px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    cursor: pointer;
+    border-radius: 5px;
+}
+
+/* Optional: Add some spacing and styling for the inputs and labels */
+#plenti_cms label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: bold;
+}
+
+#plenti_cms input {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 8px;
+    margin-bottom: 10px;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+}

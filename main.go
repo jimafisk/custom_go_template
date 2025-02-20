@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/rand"
 	"fmt"
+	"io"
 	"io/fs"
 	"log"
 	"math/big"
@@ -889,6 +890,28 @@ func isBoolAndTrue(value any) bool {
 	return false
 }
 
+func copyFile(sourcePath, destPath string) {
+	// Open the source file
+	sourceFile, err := os.Open(sourcePath)
+	if err != nil {
+		panic(err)
+	}
+	defer sourceFile.Close()
+
+	// Create the destination file
+	destinationFile, err := os.Create(destPath)
+	if err != nil {
+		panic(err)
+	}
+	defer destinationFile.Close()
+
+	// Copy the contents from the source file to the destination file
+	_, err = io.Copy(destinationFile, sourceFile)
+	if err != nil {
+		panic(err)
+	}
+}
+
 func main() {
 	// Render the template with data
 	props := map[string]any{"name": "John", "age": 2, "animals": []string{"cat", "dog", "pig"}}
@@ -896,6 +919,8 @@ func main() {
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
 	os.WriteFile("./public/index.html", []byte(markup), fs.ModePerm)
+	copyFile("./views/cms.js", "./public/cms.js")
+	copyFile("./views/cms.css", "./public/cms.css")
 
 	http.Handle("/", http.FileServer(http.Dir("./public")))
 	fmt.Println("visit site at: http://localhost:3000")
