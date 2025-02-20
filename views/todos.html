@@ -5,13 +5,26 @@ prop number;
 <script>
 	let t = document.querySelector(".todos");
     let num = t.dataset.number;
-	fetch('https://jsonplaceholder.typicode.com/todos')
-		.then(response => response.json())
-		.then(json => {
-			t.innerHTML = json.slice(0, num)
-                .map(todo => "<tr><td>" + todo.title + "</td><td>" + todo.completed + "</td></tr>")
-                .join('');
-		})
+	const fetchTodos = () => {
+		fetch('https://jsonplaceholder.typicode.com/todos')
+			.then(response => response.json())
+			.then(json => {
+				t.innerHTML = json.slice(0, num)
+					.map(todo => "<tr><td>" + todo.title + "</td><td>" + todo.completed + "</td></tr>")
+					.join('');
+			});
+	};
+	fetchTodos();
+
+	const observer = new MutationObserver(() => {
+		num = t.dataset.number;
+		fetchTodos();
+	});
+
+	observer.observe(t, {
+		attributes: true,
+		attributeFilter: ['data-number']
+	});
 </script>
 
 <table>
