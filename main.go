@@ -11,6 +11,7 @@ import (
 	"os"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -141,7 +142,7 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 			if len(props) > 0 {
 				attr := html.Attribute{
 					Key: "x-data",
-					Val: strings.ReplaceAll(anyToString(props), "\"", "'"),
+					Val: makeAttrStr(anyToString(props)),
 				}
 				node.Attr = append(node.Attr, attr)
 			}
@@ -823,11 +824,28 @@ func formatObject(value any) string {
 	if val.Kind() != reflect.Map {
 		return ""
 	}
-	var pairs []string
-	for _, key := range val.MapKeys() {
-		value := val.MapIndex(key)
-		pairs = append(pairs, fmt.Sprintf("%s", key.Interface())+": "+anyToString(value.Interface()))
+
+	// Get the map keys
+	keys := val.MapKeys()
+
+	// Convert keys to a slice of interfaces
+	keyInterfaces := make([]interface{}, len(keys))
+	for i, key := range keys {
+		keyInterfaces[i] = key.Interface()
 	}
+
+	// Sort the keys (assuming they are strings)
+	sort.Slice(keyInterfaces, func(i, j int) bool {
+		return fmt.Sprintf("%v", keyInterfaces[i]) < fmt.Sprintf("%v", keyInterfaces[j])
+	})
+
+	// Format the map entries
+	var pairs []string
+	for _, key := range keyInterfaces {
+		value := val.MapIndex(reflect.ValueOf(key))
+		pairs = append(pairs, fmt.Sprintf("%v: %v", key, anyToString(value.Interface())))
+	}
+
 	return "{" + strings.Join(pairs, ", ") + "}"
 }
 

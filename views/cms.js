@@ -20,10 +20,10 @@ function createInputs(obj, container) {
             label.htmlFor = key;
             label.textContent = key;
             const div = document.createElement('div').appendChild(label).parentNode;
+            container.appendChild(document.createElement('br'));
+            container.appendChild(document.createElement('br'));
             container.appendChild(div);
             container.appendChild(input);
-            container.appendChild(document.createElement('br'));
-            container.appendChild(document.createElement('br'));
         }
     }
 }
