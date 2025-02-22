@@ -9,6 +9,7 @@ import (
 	"math/big"
 	"net/http"
 	"os"
+	"path/filepath"
 	"reflect"
 	"regexp"
 	"sort"
@@ -41,7 +42,7 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	// Split template into parts
 	markup, fence, script, style := templateParts(template)
 	// Get list of imported components and remove imports from fence
-	fence, components := getComponents(fence)
+	fence, components := getComponents(path, fence)
 	// Set the prop to the value that's passed in
 	fence, fence_logic := setProps(fence, props)
 	// Get list of all variables declared in fence
@@ -706,7 +707,8 @@ func evaluateLoop(collection_value string) []string {
 	return r
 }
 
-func getComponents(fence string) (string, []Component) {
+func getComponents(path, fence string) (string, []Component) {
+	parentCompDir := filepath.Dir(path)
 	components := []Component{}
 	reImport := regexp.MustCompile(`import\s+([A-Za-z_][A-Za-z_0-9]*)\s+from\s*"([^"]+)";`)
 	for _, line := range strings.Split(fence, "\n") {
@@ -714,6 +716,11 @@ func getComponents(fence string) (string, []Component) {
 		if len(match) > 1 {
 			compName := match[1]
 			compPath := match[2]
+			if filepath.IsAbs(compPath) {
+				compPath = "." + filepath.Clean("/"+compPath)
+			} else {
+				compPath = filepath.Join(parentCompDir, filepath.Clean("/"+compPath))
+			}
 			components = append(components, Component{
 				Name: compName,
 				Path: compPath,
