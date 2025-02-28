@@ -114,9 +114,15 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[
 		node, scopedElements = traverse(node, scopedElements, comp_props)
 
 		if len(comp_props) > 0 {
+			x_data_str, x_init_str := makeGetter(comp_data, fence_logic)
 			attr := html.Attribute{
 				Key: "x-data",
-				Val: makeGetter(comp_data, fence_logic),
+				Val: x_data_str,
+			}
+			node.Attr = append(node.Attr, attr)
+			attr = html.Attribute{
+				Key: "x-init",
+				Val: x_init_str,
 			}
 			node.Attr = append(node.Attr, attr)
 		}
@@ -191,7 +197,7 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 					}
 				}
 				if strings.Contains(attr.Val, "{") && strings.Contains(attr.Val, "}") {
-					if attr.Key != "x-text" && attr.Key != "x-data" && !strings.HasPrefix(attr.Key, ":") {
+					if attr.Key != "x-text" && attr.Key != "x-data" && attr.Key != "x-init" && !strings.HasPrefix(attr.Key, ":") {
 						node.Attr = append(node.Attr, html.Attribute{
 							Key: ":" + attr.Key,
 							Val: "`" + strings.ReplaceAll(strings.ReplaceAll(attr.Val, "{", "${"), "\"", "'") + "`",
@@ -760,7 +766,7 @@ func getCompArgs(comp_args []string, props map[string]any) (map[string]any, map[
 func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
 	// Handle staticly imported components
 	for _, component := range components {
-		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s(.*?)/>`, component.Name))
+		reComponent := regexp.MustCompile(fmt.Sprintf(`<%s\s(.*?)/>`, component.Name))
 		matches := reComponent.FindAllStringSubmatch(markup, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
@@ -885,27 +891,34 @@ func anyToString(value any) string {
 	}
 }
 
-func makeGetter(comp_data map[string]any, fence_logic string) string {
-	comp_data_str := fmt.Sprintf("_fence: `%s`,", fence_logic)
+func makeGetter(comp_data map[string]any, fence_logic string) (string, string) {
+	x_data_str := fmt.Sprintf("_fence: `%s`,", fence_logic)
 
 	params := make([]string, 0, len(comp_data))
-	args := make([]string, 0, len(comp_data))
+	//args := make([]string, 0, len(comp_data))
+	parent_args := make([]string, 0, len(comp_data))
 	for k, v := range comp_data {
 		params = append(params, k)
 
 		value_str := fmt.Sprintf("%s", v) // Any to string
 		value_str = makeAttrStr(value_str)
-		args = append(args, value_str)
+		//args = append(args, value_str)
+		parent_args = append(parent_args, "Alpine.$data($el.parentElement)."+k)
 	}
+	x_data_str += strings.Join(append(params, ""), ": undefined, ")
 	params_str := strings.Join(params, ", ")
-	args_str := strings.Join(args, ", ")
+	//args_str := strings.Join(args, ", ")
+	parent_args_str := strings.Join(parent_args, ", ")
 
 	i := 0
+	var x_init_str string
 	for name := range comp_data {
-		comp_data_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
+		//x_init_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
+		x_init_str += fmt.Sprintf("%s = new Function('%s', `${_fence}; return %s;`)(%s),", name, params_str, name, parent_args_str)
+		x_init_str += fmt.Sprintf("$watch('Alpine.$data($el.parentElement).%s', () => %s = new Function('%s', `${_fence}; return %s;`)(%s)),", name, name, params_str, name, parent_args_str)
 		i++
 	}
-	return "{" + comp_data_str + "}"
+	return "{" + x_data_str + "}", strings.TrimRight(x_init_str, ",")
 }
 
 func isBoolAndTrue(value any) bool {

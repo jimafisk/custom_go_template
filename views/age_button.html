@@ -1,0 +1,11 @@
+---
+prop age;
+
+age = age + 1;
+---
+
+<section class="age-button">
+    <h3>Age is: {age}</h3>
+	<button x-on:click="age = age + 1">+</button>
+	<button x-on:click="age = age - 1">-</button>
+</section>

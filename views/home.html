@@ -2,6 +2,7 @@
 import Age from "age.html";
 import Head from "./head.html";
 import Todos from "/views/todos.html";
+import AgeButton from "age_button.html";
 
 prop name;
 prop age;
@@ -24,15 +25,17 @@ let comp = "mycomp";
 		<main>
 			<div id="plenti_cms"></div>
 			<button id="toggle_plenti_cms">Toggle CMS</button>
+			<AgeButton {age} />
+			<AgeButton age={age + 1} />
 			<h1>{salutation} {name}</h1>
 			<span>{test}</span>
-			{if name === "John"}
-				<div id="praise">{name} is great</div>
+			{if name.length > 3}
+				<div id="praise">{name} is a long name</div>
 				{if age > 1}
 					<div>Has been born</div>
 				{/if}
 			{else}
-				<div id="praise">Not sure who you are, but you're probably great</div>
+				<div id="praise">{name} is a short name</div>
 			{/if}
 			{if age > 0}
 				<Age name={"Bill"} {age} />
