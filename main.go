@@ -920,7 +920,7 @@ func makeGetter(comp_data map[string]any, fence_logic string) (string, string) {
 	for name := range comp_data {
 		//x_data_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
 		x_init_str += fmt.Sprintf("%s = new Function('%s', `${_fence}; return %s;`)(%s),", name, params_str, name, args_str)
-		x_init_str += fmt.Sprintf("$watch('Alpine.$data($el.parentElement).%s', () => %s = new Function('%s', `${_fence}; return %s;`)(%s)),", name, name, params_str, name, args_str)
+		x_init_str += fmt.Sprintf("$watch('Alpine.$data($el.parentElement)', () => %s = new Function('%s', `${_fence}; return %s;`)(%s)),", name, params_str, name, args_str)
 		i++
 	}
 	return "{" + x_data_str + "}", strings.TrimRight(x_init_str, ",")
