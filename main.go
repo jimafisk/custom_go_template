@@ -895,27 +895,32 @@ func makeGetter(comp_data map[string]any, fence_logic string) (string, string) {
 	x_data_str := fmt.Sprintf("_fence: `%s`,", fence_logic)
 
 	params := make([]string, 0, len(comp_data))
-	//args := make([]string, 0, len(comp_data))
-	parent_args := make([]string, 0, len(comp_data))
+	args := make([]string, 0, len(comp_data))
 	for k, v := range comp_data {
 		params = append(params, k)
 
 		value_str := fmt.Sprintf("%s", v) // Any to string
 		value_str = makeAttrStr(value_str)
-		//args = append(args, value_str)
-		parent_args = append(parent_args, "Alpine.$data($el.parentElement)."+k)
+
+		for prop_name, _ := range comp_data {
+			if strings.Contains(value_str, prop_name) {
+				// TODO: This string replacement is sloppy and could target partial variables or string values
+				value_str = strings.ReplaceAll(value_str, prop_name, "Alpine.$data($el.parentElement)."+prop_name)
+			}
+
+		}
+		args = append(args, value_str)
 	}
 	x_data_str += strings.Join(append(params, ""), ": undefined, ")
 	params_str := strings.Join(params, ", ")
-	//args_str := strings.Join(args, ", ")
-	parent_args_str := strings.Join(parent_args, ", ")
+	args_str := strings.Join(args, ", ")
 
 	i := 0
 	var x_init_str string
 	for name := range comp_data {
-		//x_init_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
-		x_init_str += fmt.Sprintf("%s = new Function('%s', `${_fence}; return %s;`)(%s),", name, params_str, name, parent_args_str)
-		x_init_str += fmt.Sprintf("$watch('Alpine.$data($el.parentElement).%s', () => %s = new Function('%s', `${_fence}; return %s;`)(%s)),", name, name, params_str, name, parent_args_str)
+		//x_data_str += fmt.Sprintf("get %s() {return (new Function('%s', `${this._fence}; return %s;`))(%s); },", name, params_str, name, args_str)
+		x_init_str += fmt.Sprintf("%s = new Function('%s', `${_fence}; return %s;`)(%s),", name, params_str, name, args_str)
+		x_init_str += fmt.Sprintf("$watch('Alpine.$data($el.parentElement).%s', () => %s = new Function('%s', `${_fence}; return %s;`)(%s)),", name, name, params_str, name, args_str)
 		i++
 	}
 	return "{" + x_data_str + "}", strings.TrimRight(x_init_str, ",")
