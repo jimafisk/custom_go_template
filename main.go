@@ -518,124 +518,371 @@ func evalJS(jsCode string, props map[string]any) any {
 	return goja_value.Export()
 }
 
-type conditional struct {
-	ifCondition      string
-	elseIfConditions []string
+type ifStmt struct {
+	ifCondition string
+	//elseIfConditions []string
+	//ifContent string
+	ifContent []control
 
-	startOpenIfIndex   int
-	startElseIfIndexes []int
-	startElseIndex     int
+	startOpenIfIndex  int
+	startCloseIfIndex int
+	//startElseIfIndexes []int
+	elseIfStmts    []elseIfStmt
+	startElseIndex int
 
-	startIfContentIndex       int
-	startElseIfContentIndexes []int
-	startElseContentIndex     int
+	startIfContentIndex int
+	//startElseIfContentIndexes []int
+	startElseContentIndex int
+	//elseContent           string
+	elseContent []control
+}
+
+type elseIfStmt struct {
+	startElseIfIndex int
+	elseIfCondition  string
+
+	startElseIfContentIndex int
+	//elseIfContent           string
+	elseIfContent []control
+}
+
+type elseStmt struct {
+}
+
+type forLoop struct {
+	forVar        string
+	forCollection string
+
+	startOpenForIndex    int
+	startCloseForIndex   int
+	startForContentIndex int
+	//forContent           string
+	forContent []control
+}
+
+type textNode struct {
+	textContent string
+}
+
+type control struct {
+	//stop      bool
+	isIfStmt bool
+	ifStmt   ifStmt
+
+	isElseIfStmt bool
+	elseIfStmt   elseIfStmt
+
+	isElseStmt bool
+	elseStmt   elseStmt
+
+	isForLoop bool
+	forLoop   forLoop
+
+	isTextNode bool
+	textNode   textNode
+
+	children []control
+	closed   bool
 }
 
 // FindIfConditions finds if-conditions in a given string
 func FindIfConditions(markup string, props map[string]any) (string, error) {
-	var conditionals []conditional
-	var currentConditional conditional
+	//var currentIfStmt int
+	//var currentForLoop int
+	var controlStack []control
+	//controlStack := []control{}
+	//stack := [][]control{}
+	//nodes := []control{}
+	openStackIndex := 0
 	for i := 0; i < len(markup); i++ {
+		for stackIndex := len(controlStack) - 1; stackIndex >= 0; stackIndex-- {
+			if !controlStack[stackIndex].closed {
+				openStackIndex = stackIndex
+			}
+		}
 		if strings.HasPrefix(markup[i:], "{if ") {
 			startOpenIfIndex := i
 
 			relativeEndOpenIfIndex := strings.Index(markup[startOpenIfIndex:], "}")
 			if relativeEndOpenIfIndex == -1 {
-				return "", fmt.Errorf("unbalanced if-condition at index %d", startOpenIfIndex)
+				return "", fmt.Errorf("If-condition missing closing \"}\" at index %d", startOpenIfIndex)
 			}
 			endOpenIfIndex := startOpenIfIndex + relativeEndOpenIfIndex
 
 			ifCondition := markup[startOpenIfIndex+len("{if ") : endOpenIfIndex]
 
 			startIfContentIndex := endOpenIfIndex + 1
-			currentConditional = conditional{
-				startOpenIfIndex:    startOpenIfIndex,
-				ifCondition:         ifCondition,
-				startIfContentIndex: startIfContentIndex,
+
+			if openStackIndex > 0 {
+				controlStack[openStackIndex].children = append(controlStack[openStackIndex].children, control{
+					closed:   false,
+					isIfStmt: true,
+					ifStmt: ifStmt{
+						startOpenIfIndex:    startOpenIfIndex,
+						ifCondition:         ifCondition,
+						startIfContentIndex: startIfContentIndex,
+					},
+				})
+			} else {
+				controlStack = append(controlStack, control{
+					//nodes = append(nodes, control{
+					isIfStmt: true,
+					ifStmt: ifStmt{
+						startOpenIfIndex:    startOpenIfIndex,
+						ifCondition:         ifCondition,
+						startIfContentIndex: startIfContentIndex,
+					},
+				})
 			}
-			conditionals = append(conditionals, currentConditional)
+			//currentIfStmt = len(controlStack) - 1
+			//stack = append(stack, nodes)
+			//nodes = []control{}
+			i = endOpenIfIndex + 1
+		} else if strings.HasPrefix(markup[i:], "{for ") {
+			startOpenForIndex := i
+			relativeEndOpenForIndex := strings.Index(markup[startOpenForIndex:], "}")
+			if relativeEndOpenForIndex == -1 {
+				return "", fmt.Errorf("For-loop missing closing \"}\" at index %d", startOpenForIndex)
+			}
+			endOpenForIndex := startOpenForIndex + relativeEndOpenForIndex
+
+			re := regexp.MustCompile(`for (?:let|var|const) (\w+) (?:of|in) (\w+)`)
+			matches := re.FindStringSubmatch(markup[startOpenForIndex:endOpenForIndex])
+			if len(matches) < 2 {
+				return "", fmt.Errorf("For-loop missing iterator / collection \"}\" at index %d", startOpenForIndex)
+			}
+			forVar := matches[1]
+			forCollection := matches[2]
+
+			if openStackIndex > 0 {
+				controlStack[openStackIndex].children = append(controlStack[openStackIndex].children, control{
+					closed:    false,
+					isForLoop: true,
+					forLoop: forLoop{
+						forVar:            forVar,
+						forCollection:     forCollection,
+						startOpenForIndex: startOpenForIndex,
+					},
+				})
+			} else {
+				controlStack = append(controlStack, control{
+					isForLoop: true,
+					forLoop: forLoop{
+						forVar:            forVar,
+						forCollection:     forCollection,
+						startOpenForIndex: startOpenForIndex,
+					},
+				})
+			}
+			//currentForLoop = len(controlStack) - 1
+			i = endOpenForIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else if ") {
 			startElseIfIndex := i
-			currentConditional.startElseIfIndexes = append(currentConditional.startElseIfIndexes, startElseIfIndex)
+
+			if openStackIndex > 0 && !controlStack[openStackIndex].isIfStmt {
+				return "", fmt.Errorf("{else if} at index %d missing opening {if}", startElseIfIndex)
+			}
+
+			/*
+				controlStack[currentIfStmt].ifStmt.elseIfStmts = append(controlStack[currentIfStmt].ifStmt.elseIfStmts, elseIfStmt{})
+				currentElseIfStmt := len(controlStack[currentIfStmt].ifStmt.elseIfStmts) - 1
+				controlStack[currentIfStmt].ifStmt.elseIfStmts[currentElseIfStmt].startElseIfIndex = startElseIfIndex
+			*/
 
 			relativeEndElseIfIndex := strings.Index(markup[startElseIfIndex:], "}")
 			if relativeEndElseIfIndex == -1 {
-				return "", fmt.Errorf("unbalanced else-if-condition at index %d", startElseIfIndex)
+				return "", fmt.Errorf("Else-if-condition missing closing \"}\" at index %d", startElseIfIndex)
 			}
 			endElseIfIndex := startElseIfIndex + relativeEndElseIfIndex
 
 			elseIfCondition := markup[startElseIfIndex+len("{else if ") : endElseIfIndex]
-			currentConditional.elseIfConditions = append(currentConditional.elseIfConditions, elseIfCondition)
 
-			startElseIfContentIndex := endElseIfIndex + 1
-			currentConditional.startElseIfContentIndexes = append(currentConditional.startElseIfContentIndexes, startElseIfContentIndex)
+			controlStack[openStackIndex].children = append(controlStack[openStackIndex].children, control{
+				closed:       false,
+				isElseIfStmt: true,
+				elseIfStmt: elseIfStmt{
+					elseIfCondition: elseIfCondition,
+				},
+			})
+
+			/*
+				controlStack[openStackIndex].ifStmt.elseIfStmts[currentElseIfStmt].elseIfCondition = elseIfCondition
+				controlStack[currentIfStmt].ifStmt.elseIfStmts[currentElseIfStmt].elseIfCondition = elseIfCondition
+
+				startElseIfContentIndex := endElseIfIndex + 1
+				controlStack[currentIfStmt].ifStmt.elseIfStmts[currentElseIfStmt].startElseIfContentIndex = startElseIfContentIndex
+			*/
+			i = endElseIfIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else}") {
 			startElseIndex := i
-			currentConditional.startElseIndex = startElseIndex
+			controlStack[currentIfStmt].ifStmt.startElseIndex = startElseIndex
 			endElseIndex := startElseIndex + len("{else}")
 
 			startElseContentIndex := endElseIndex + 1
-			currentConditional.startElseContentIndex = startElseContentIndex
+			controlStack[currentIfStmt].ifStmt.startElseContentIndex = startElseContentIndex
+			i = endElseIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
-			startCloseIfIndex := i
-			endIfContentIndex := startCloseIfIndex
-
-			startOpenIfIndex := currentConditional.startOpenIfIndex
-			ifCondition := currentConditional.ifCondition
-
-			if isBoolAndTrue(evalJS(ifCondition, props)) {
-				startIfContentIndex := currentConditional.startIfContentIndex
-				if len(currentConditional.startElseIfIndexes) > 0 {
-					endIfContentIndex = currentConditional.startElseIfIndexes[0] - 1
-				} else if currentConditional.startElseIndex > 0 {
-					// Although 0 is a valid index, an {else} should never be in first position, so this is a valid way to check if "else" was set
-					endIfContentIndex = currentConditional.startElseIndex - 1
-				}
-
-				ifContent := markup[startIfContentIndex:endIfContentIndex]
-				modifiedMarkup := markup[:startOpenIfIndex] + ifContent + markup[startCloseIfIndex+len("{/if}"):]
-				i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
-				markup = modifiedMarkup
-			} else {
-				elseIfWasTrue := false
-				endElseIfContentIndex := endIfContentIndex
-				numOfConditions := len(currentConditional.elseIfConditions)
-				for condPos, elseIfCondition := range currentConditional.elseIfConditions {
-					if isBoolAndTrue(evalJS(elseIfCondition, props)) && !elseIfWasTrue {
-						elseIfWasTrue = true
-						startElseIfContentIndex := currentConditional.startElseIfContentIndexes[condPos]
-						if numOfConditions > condPos {
-							// If there are more else if conditions, the start of the next one is the end of the current one
-							endElseIfContentIndex = currentConditional.startElseIfIndexes[condPos+1]
+			if len(controlStack[currentIfStmt].ifStmt.elseIfStmts) > 0 {
+				// Has {else if} statements
+				controlStack[currentIfStmt].ifStmt.startCloseIfIndex = controlStack[currentIfStmt].ifStmt.elseIfStmts[0].startElseIfContentIndex - 1
+				for j, elseIfStmt := range controlStack[currentIfStmt].ifStmt.elseIfStmts {
+					if j == len(controlStack[currentIfStmt].ifStmt.elseIfStmts) {
+						// Last {else if} statement
+						if controlStack[currentIfStmt].ifStmt.startElseIndex > 0 {
+							// Has {else}
+							controlStack[currentIfStmt].ifStmt.elseIfStmts[j].elseIfContent = markup[elseIfStmt.startElseIfContentIndex : controlStack[currentIfStmt].ifStmt.startElseIndex-1]
+						} else {
+							// Doesn't have {else}
+							controlStack[currentIfStmt].ifStmt.elseIfStmts[j].elseIfContent = markup[elseIfStmt.startElseIfContentIndex:i]
 						}
-						if condPos == numOfConditions && currentConditional.startElseIndex > 0 {
-							// Last if else statement is true and there's an else after
-							endElseIfContentIndex = currentConditional.startElseIndex
-						}
-						currentElseIfContent := markup[startElseIfContentIndex:endElseIfContentIndex]
-						modifiedMarkup := markup[:startOpenIfIndex] + currentElseIfContent + markup[startCloseIfIndex+len("{/if}"):]
-						i -= len(markup) - len(modifiedMarkup)
-						markup = modifiedMarkup
+					} else {
+						// Not last {else if} statement
+						controlStack[currentIfStmt].ifStmt.elseIfStmts[j].elseIfContent = markup[elseIfStmt.startElseIfContentIndex : controlStack[currentIfStmt].ifStmt.elseIfStmts[j+1].startElseIfContentIndex-1]
 					}
 				}
-				if !elseIfWasTrue && currentConditional.startElseIndex > 0 {
-					startElseContentIndex := currentConditional.startElseContentIndex
-					currentElseContent := markup[startElseContentIndex:startCloseIfIndex]
-					modifiedMarkup := markup[:startOpenIfIndex] + currentElseContent + markup[startCloseIfIndex+len("{/if}"):]
-					i -= len(markup) - len(modifiedMarkup)
-					markup = modifiedMarkup
-				}
+			} else if controlStack[currentIfStmt].ifStmt.startElseIndex > 0 {
+				// Although 0 is a valid index, an {else} should never be in first position, so this is a valid way to check if "else" was set
+				controlStack[currentIfStmt].ifStmt.startCloseIfIndex = controlStack[currentIfStmt].ifStmt.startElseIndex - 1
+			} else {
+				controlStack[currentIfStmt].ifStmt.startCloseIfIndex = i
 			}
-			// Remove current conditional from stack
-			conditionals = conditionals[:len(conditionals)-1]
-			if len(conditionals) > 0 {
-				// Point to the new last item in the list
-				currentConditional = conditionals[len(conditionals)-1]
+
+			controlStack[currentIfStmt].ifStmt.ifContent = markup[controlStack[currentIfStmt].ifStmt.startIfContentIndex:controlStack[currentIfStmt].ifStmt.startCloseIfIndex]
+			i += len("{/if}")
+			//controlStack[currentIfStmt].ifStmt.ifContent = markup[controlStack[currentIfStmt].ifStmt.startIfContentIndex:i]
+			/*
+				modifiedMarkup := evalIfStmt(currentConditional, markup)
+				i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
+				markup = modifiedMarkup
+
+				// Remove current conditional from stack
+				conditionals = conditionals[:len(conditionals)-1]
+				if len(conditionals) > 0 {
+					// Point to the new last item in the list
+					currentConditional = conditionals[len(conditionals)-1]
+				}
+			*/
+		} else if strings.HasPrefix(markup[i:], "{/for}") {
+			//controlStack[currentForLoop].forLoop.startCloseForIndex = i
+			//controlStack[currentForLoop].forLoop.forContent = markup[controlStack[currentForLoop].forLoop.startOpenForIndex:i]
+			controlStack[openStackIndex].closed = true
+			i += len("{/for}")
+		} else {
+			start := i
+			for i < len(markup) &&
+				!strings.HasPrefix(markup[i:], "{if ") &&
+				!strings.HasPrefix(markup[i:], "{for ") &&
+				!strings.HasPrefix(markup[i:], "{else if ") &&
+				!strings.HasPrefix(markup[i:], "{else}") &&
+				!strings.HasPrefix(markup[i:], "{/if}") &&
+				!strings.HasPrefix(markup[i:], "{/for}") {
+				i++
+			}
+			if start < i {
+				if openStackIndex > 0 {
+					controlStack[openStackIndex].children = append(controlStack[openStackIndex].children, control{
+						isTextNode: true,
+						textNode: textNode{
+							textContent: markup[start:i],
+						},
+					})
+				} else {
+					controlStack = append(controlStack, control{
+						isTextNode: true,
+						textNode: textNode{
+							textContent: markup[start:i],
+						},
+					})
+				}
 			}
 		}
 	}
 
+	markup = evalControlStack(controlStack, markup, props)
+
 	return markup, nil
+}
+
+func evalControlStack(controlStack []control, markup string, props map[string]any) string {
+	stop := false
+	for _, currentControl := range controlStack {
+		if stop {
+			break
+		}
+		if currentControl.isIfStmt {
+			//if (!reflect.DeepEqual(currentControl.ifStmt, ifStmt{})) {
+			// Current control is an if statement
+			modifiedMarkup = evalIfStmt(currentControl.ifStmt, markup, props)
+		} else if currentControl.isForLoop {
+			//} else if (currentControl.forLoop != forLoop{}) {
+			// Current control is a for loop
+			modifiedMarkup, props = evalForLoop(currentControl.forLoop, markup, props)
+		}
+		modifiedMarkup := evalIfStmt(currentConditional, markup)
+		i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
+		markup = modifiedMarkup
+		// Remove current conditional from stack
+		conditionals = conditionals[:len(conditionals)-1]
+	}
+}
+
+func evalForLoop(currentForLoop forLoop, markup string, props map[string]any) {
+	forItems := evaluateLoop(anyToString(evalJS(currentForLoop.forCollection, props)))
+	if len(forItems) > 0 {
+
+	}
+
+}
+
+func evalIfStmt(currentIfStmt ifStmt, markup string, props map[string]any) {
+	endIfContentIndex := currentIfStmt.startCloseIfIndex
+
+	startOpenIfIndex := currentIfStmt.startOpenIfIndex
+	ifCondition := currentIfStmt.ifCondition
+
+	if isBoolAndTrue(evalJS(ifCondition, props)) {
+		startIfContentIndex := currentIfStmt.startIfContentIndex
+		if len(currentIfStmt.startElseIfIndexes) > 0 {
+			endIfContentIndex = currentIfStmt.startElseIfIndexes[0] - 1
+		} else if currentIfStmt.startElseIndex > 0 {
+			// Although 0 is a valid index, an {else} should never be in first position, so this is a valid way to check if "else" was set
+			endIfContentIndex = currentIfStmt.startElseIndex - 1
+		}
+
+		ifContent := markup[startIfContentIndex:endIfContentIndex]
+		modifiedMarkup := markup[:startOpenIfIndex] + ifContent + markup[startCloseIfIndex+len("{/if}"):]
+		i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
+		markup = modifiedMarkup
+	} else {
+		elseIfWasTrue := false
+		endElseIfContentIndex := endIfContentIndex
+		numOfConditions := len(currentConditional.elseIfConditions)
+		for condPos, elseIfCondition := range currentConditional.elseIfConditions {
+			if isBoolAndTrue(evalJS(elseIfCondition, props)) && !elseIfWasTrue {
+				elseIfWasTrue = true
+				startElseIfContentIndex := currentConditional.startElseIfContentIndexes[condPos]
+				if numOfConditions > condPos {
+					// If there are more else if conditions, the start of the next one is the end of the current one
+					endElseIfContentIndex = currentConditional.startElseIfIndexes[condPos+1]
+				}
+				if condPos == numOfConditions && currentConditional.startElseIndex > 0 {
+					// Last if else statement is true and there's an else after
+					endElseIfContentIndex = currentConditional.startElseIndex
+				}
+				currentElseIfContent := markup[startElseIfContentIndex:endElseIfContentIndex]
+				modifiedMarkup := markup[:startOpenIfIndex] + currentElseIfContent + markup[startCloseIfIndex+len("{/if}"):]
+				i -= len(markup) - len(modifiedMarkup)
+				markup = modifiedMarkup
+			}
+		}
+		if !elseIfWasTrue && currentConditional.startElseIndex > 0 {
+			startElseContentIndex := currentConditional.startElseContentIndex
+			currentElseContent := markup[startElseContentIndex:startCloseIfIndex]
+			modifiedMarkup := markup[:startOpenIfIndex] + currentElseContent + markup[startCloseIfIndex+len("{/if}"):]
+			i -= len(markup) - len(modifiedMarkup)
+			markup = modifiedMarkup
+		}
+	}
 }
 
 func renderConditions(markup string, props map[string]any) string {
