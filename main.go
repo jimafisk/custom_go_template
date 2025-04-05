@@ -51,9 +51,11 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	props = evaluateProps(fence, allVars, props)
 	// Run template conditions {if}{else}{/if}
 	//markup = renderConditions(markup, props)
-	markup, _ = FindIfConditions(markup, props)
+	controlTree, _ := buildControlTree(markup)
+	//markup = evalControlTree(controlTree, markup, script, style, props, components)
+	markup = evalControlTree(controlTree, props)
 	// Run template loops {for let _ in _}{/for} and {for let _ of _}{/for}
-	markup = renderLoops(markup, props)
+	//markup = renderLoops(markup, props)
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
 	// Create scoped classes and add to html
@@ -538,11 +540,9 @@ type control struct {
 	open     bool
 }
 
-// FindIfConditions finds if-conditions in a given string
-func FindIfConditions(markup string, props map[string]any) (string, error) {
+func buildControlTree(markup string) ([]control, error) {
 	var controlTree []control
 	var controlStack []*control
-	//for i := 0; i < len(markup); i++ {
 	for i := 0; i < len(markup); {
 		var openControl *control
 		if len(controlStack) > 0 {
@@ -553,13 +553,11 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 
 			relativeEndOpenIfIndex := strings.Index(markup[startOpenIfIndex:], "}")
 			if relativeEndOpenIfIndex == -1 {
-				return "", fmt.Errorf("{if ...} condition missing closing \"}\" at index %d", startOpenIfIndex)
+				return nil, fmt.Errorf("{if ...} condition missing closing \"}\" at index %d", startOpenIfIndex)
 			}
 			endOpenIfIndex := startOpenIfIndex + relativeEndOpenIfIndex
 
 			ifCondition := markup[startOpenIfIndex+len("{if ") : endOpenIfIndex]
-			fmt.Println("FOUND IF CONDITION:")
-			fmt.Println(ifCondition)
 
 			newControl := control{
 				isIfStmt:    true,
@@ -575,24 +573,19 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 				controlStack = append(controlStack, &controlTree[len(controlTree)-1])
 			}
 
-			fmt.Println(i)
 			i = endOpenIfIndex + 1
-			fmt.Println(i)
 		} else if strings.HasPrefix(markup[i:], "{for ") {
-			fmt.Println("FOR FOUND")
 			startOpenForIndex := i
 			relativeEndOpenForIndex := strings.Index(markup[startOpenForIndex:], "}")
 			if relativeEndOpenForIndex == -1 {
-				return "", fmt.Errorf("For-loop missing closing \"}\" at index %d", startOpenForIndex)
+				return nil, fmt.Errorf("{for } loop missing closing \"}\" at index %d", startOpenForIndex)
 			}
 			endOpenForIndex := startOpenForIndex + relativeEndOpenForIndex
 
 			re := regexp.MustCompile(`for (?:let|var|const) (\w+) (?:of|in) (.*)`)
-			fmt.Println(markup[startOpenForIndex:endOpenForIndex])
 			matches := re.FindStringSubmatch(markup[startOpenForIndex:endOpenForIndex])
-			fmt.Println(matches)
 			if len(matches) < 2 {
-				return "", fmt.Errorf("For-loop missing iterator / collection \"}\" at index %d", startOpenForIndex)
+				return nil, fmt.Errorf("{for } loop missing iterator / collection \"}\" at index %d", startOpenForIndex)
 			}
 
 			newControl := control{
@@ -601,7 +594,6 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 				forCollection: matches[2],
 				open:          true,
 			}
-			fmt.Println("FOR FOUND")
 			if openControl != nil {
 				openControl.children = append(openControl.children, newControl)
 				controlStack = append(controlStack, &openControl.children[len(openControl.children)-1])
@@ -609,18 +601,17 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 				controlTree = append(controlTree, newControl)
 				controlStack = append(controlStack, &controlTree[len(controlTree)-1])
 			}
-			fmt.Println("FOR FOUND")
 
 			i = endOpenForIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else if ") {
 			if openControl == nil || !openControl.isIfStmt {
-				return "", fmt.Errorf("{else if} at index %d missing opening {if}", i)
+				return nil, fmt.Errorf("{else if} at index %d missing opening {if}", i)
 			}
 			startElseIfIndex := i
 
 			relativeEndElseIfIndex := strings.Index(markup[startElseIfIndex:], "}")
 			if relativeEndElseIfIndex == -1 {
-				return "", fmt.Errorf("Else-if-condition missing closing \"}\" at index %d", startElseIfIndex)
+				return nil, fmt.Errorf("{else if} condition missing closing \"}\" at index %d", startElseIfIndex)
 			}
 			endElseIfIndex := startElseIfIndex + relativeEndElseIfIndex
 
@@ -636,9 +627,8 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			i = endElseIfIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else}") {
 			if openControl == nil || !openControl.isIfStmt {
-				return "", fmt.Errorf("{else} at index %d missing opening {if}", i)
+				return nil, fmt.Errorf("{else} at index %d missing opening {if}", i)
 			}
-			//openControl.isElseStmt = true
 			newControl := control{
 				isElseStmt: true,
 				open:       true,
@@ -647,14 +637,14 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 			i += len("{else}")
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
 			if openControl == nil {
-				return "", fmt.Errorf("closing {/if} at index %d without opening {if}", i)
+				return nil, fmt.Errorf("closing {/if} at index %d without opening {if}", i)
 			}
 			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			i += len("{/if}")
 		} else if strings.HasPrefix(markup[i:], "{/for}") {
 			if openControl == nil {
-				return "", fmt.Errorf("closing {/for} at index %d without opening {for}", i)
+				return nil, fmt.Errorf("closing {/for} at index %d without opening {for}", i)
 			}
 			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
@@ -676,13 +666,10 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 					textContent: markup[start:i],
 					open:        true,
 				}
-				fmt.Println(newControl.textContent)
-				fmt.Println("=========================================")
 				if openControl != nil {
 					openControl.children = append(openControl.children, newControl)
 					// Note: Not adding text nodes to controlStack as they don't need closing
 				} else {
-					//fmt.Println("NOT OPEN")
 					controlTree = append(controlTree, newControl)
 					// Note: Not adding text nodes to controlStack as they don't need closing
 				}
@@ -690,24 +677,20 @@ func FindIfConditions(markup string, props map[string]any) (string, error) {
 		}
 	}
 
-	fmt.Println("************************************")
-	//fmt.Printf("%+v\n", controlTree)
-
-	markup = evalControlTree(controlTree, props)
-
-	return markup, nil
+	return controlTree, nil
 }
 
 func evalControlTree(controlTree []control, props map[string]any) string {
+	//func evalControlTree(controlTree []control, markup, script, style string, props map[string]any, components []Component) string {
 	var result strings.Builder
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
-			fmt.Println(ctrl.textContent)
-			fmt.Println("=========================================")
+			//fmt.Println(ctrl.textContent)
+			//markup, script, style = renderComponents(ctrl.textContent, script, style, props, components)
+			//result.WriteString(evalAllBrackets(markup, props))
 			result.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
-			fmt.Println(ctrl.ifCondition)
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
 				result.WriteString(evalControlTree(ctrl.children, props))
 			} else {
@@ -745,7 +728,6 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 			}
 		}
 	}
-	fmt.Println(result.String())
 
 	return result.String()
 }
