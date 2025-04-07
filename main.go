@@ -617,6 +617,8 @@ func buildControlTree(markup string) ([]control, error) {
 
 			elseIfCondition := markup[startElseIfIndex+len("{else if ") : endElseIfIndex]
 
+			openControl.open = false
+			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			openControl.children = append(openControl.children, control{
 				isElseIfStmt:    true,
 				elseIfCondition: elseIfCondition,
@@ -633,7 +635,10 @@ func buildControlTree(markup string) ([]control, error) {
 				isElseStmt: true,
 				open:       true,
 			}
+			openControl.open = false
+			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			openControl.children = append(openControl.children, newControl)
+			controlStack = append(controlStack, &openControl.children[len(openControl.children)-1])
 			i += len("{else}")
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
 			if openControl == nil {
@@ -1135,7 +1140,7 @@ func copyFile(sourcePath, destPath string) {
 
 func main() {
 	// Render the template with data
-	props := map[string]any{"name": "John", "age": 2, "animals": []string{"cat", "dog", "pig"}}
+	props := map[string]any{"name": "Jo", "age": 2, "animals": []string{"cat", "dog", "pig"}}
 	markup, script, style, _ := Render("views/home.html", props)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)
