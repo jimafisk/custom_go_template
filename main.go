@@ -51,7 +51,10 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	props = evaluateProps(fence, allVars, props)
 	// Run template conditions {if}{else}{/if}
 	//markup = renderConditions(markup, props)
-	controlTree, _ := buildControlTree(markup)
+	controlTree, err := buildControlTree(markup)
+	if err != nil {
+		fmt.Println(err)
+	}
 	//markup = evalControlTree(controlTree, markup, script, style, props, components)
 	markup = evalControlTree(controlTree, props)
 	// Run template loops {for let _ in _}{/for} and {for let _ of _}{/for}
@@ -617,8 +620,13 @@ func buildControlTree(markup string) ([]control, error) {
 
 			elseIfCondition := markup[startElseIfIndex+len("{else if ") : endElseIfIndex]
 
-			openControl.open = false
-			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
+			if openControl.isElseIfStmt {
+				fmt.Println("fire")
+				openControl.open = false
+				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
+				openControl = controlStack[len(controlStack)-1]
+			}
+
 			openControl.children = append(openControl.children, control{
 				isElseIfStmt:    true,
 				elseIfCondition: elseIfCondition,
@@ -628,21 +636,32 @@ func buildControlTree(markup string) ([]control, error) {
 
 			i = endElseIfIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else}") {
-			if openControl == nil || !openControl.isIfStmt {
-				return nil, fmt.Errorf("{else} at index %d missing opening {if}", i)
-			}
+			/*
+				if openControl == nil || !openControl.isIfStmt {
+					return nil, fmt.Errorf("{else} at index %d missing opening {if}", i)
+				}
+			*/
 			newControl := control{
 				isElseStmt: true,
 				open:       true,
 			}
-			openControl.open = false
-			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
+
+			if openControl.isElseIfStmt {
+				fmt.Println(openControl.elseIfCondition)
+				openControl.open = false
+				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
+				openControl = controlStack[len(controlStack)-1]
+			}
 			openControl.children = append(openControl.children, newControl)
 			controlStack = append(controlStack, &openControl.children[len(openControl.children)-1])
 			i += len("{else}")
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
 			if openControl == nil {
 				return nil, fmt.Errorf("closing {/if} at index %d without opening {if}", i)
+			}
+			if openControl.isElseIfStmt || openControl.isElseStmt {
+				openControl.open = false
+				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			}
 			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
@@ -690,6 +709,7 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 	var result strings.Builder
 
 	for _, ctrl := range controlTree {
+		//fmt.Println(ctrl)
 		if ctrl.isTextNode {
 			//fmt.Println(ctrl.textContent)
 			//markup, script, style = renderComponents(ctrl.textContent, script, style, props, components)
@@ -697,12 +717,16 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 			result.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
+				//fmt.Println(ctrl.ifCondition)
 				result.WriteString(evalControlTree(ctrl.children, props))
 			} else {
+				//fmt.Println("else if")
 				evaluated := false
 				// Process else-if statements
 				for _, child := range ctrl.children {
+					//fmt.Println(child)
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
+						//fmt.Println(child.elseIfCondition)
 						result.WriteString(evalControlTree(child.children, props))
 						evaluated = true
 						break
@@ -1140,7 +1164,7 @@ func copyFile(sourcePath, destPath string) {
 
 func main() {
 	// Render the template with data
-	props := map[string]any{"name": "Jo", "age": 2, "animals": []string{"cat", "dog", "pig"}}
+	props := map[string]any{"name": "J", "age": 2, "animals": []string{"cat", "dog", "pig"}}
 	markup, script, style, _ := Render("views/home.html", props)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
 	os.WriteFile("./public/style.css", []byte(style), fs.ModePerm)

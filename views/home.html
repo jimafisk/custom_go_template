@@ -34,6 +34,8 @@ let comp = "mycomp";
 				{if age > 1}
 					<div>Has been born</div>
 				{/if}
+			{else if name.length == 2}
+				<div id="praise">{name} is medium</div>
 			{else}
 				<div id="praise">{name} is a short name</div>
 			{/if}
