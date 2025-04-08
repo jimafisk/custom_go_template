@@ -546,11 +546,8 @@ type control struct {
 func buildControlTree(markup string) ([]control, error) {
 	var controlTree []control
 	var controlStack []*control
+	var openControl *control
 	for i := 0; i < len(markup); {
-		var openControl *control
-		if len(controlStack) > 0 {
-			openControl = controlStack[len(controlStack)-1]
-		}
 		if strings.HasPrefix(markup[i:], "{if ") {
 			startOpenIfIndex := i
 
@@ -575,6 +572,7 @@ func buildControlTree(markup string) ([]control, error) {
 				controlTree = append(controlTree, newControl)
 				controlStack = append(controlStack, &controlTree[len(controlTree)-1])
 			}
+			openControl = controlStack[len(controlStack)-1]
 
 			i = endOpenIfIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{for ") {
@@ -604,10 +602,11 @@ func buildControlTree(markup string) ([]control, error) {
 				controlTree = append(controlTree, newControl)
 				controlStack = append(controlStack, &controlTree[len(controlTree)-1])
 			}
+			openControl = controlStack[len(controlStack)-1]
 
 			i = endOpenForIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else if ") {
-			if openControl == nil || !openControl.isIfStmt {
+			if openControl == nil {
 				return nil, fmt.Errorf("{else if} at index %d missing opening {if}", i)
 			}
 			startElseIfIndex := i
@@ -621,7 +620,6 @@ func buildControlTree(markup string) ([]control, error) {
 			elseIfCondition := markup[startElseIfIndex+len("{else if ") : endElseIfIndex]
 
 			if openControl.isElseIfStmt {
-				fmt.Println("fire")
 				openControl.open = false
 				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 				openControl = controlStack[len(controlStack)-1]
@@ -633,27 +631,27 @@ func buildControlTree(markup string) ([]control, error) {
 				open:            true,
 			})
 			controlStack = append(controlStack, &openControl.children[len(openControl.children)-1])
+			openControl = controlStack[len(controlStack)-1]
 
 			i = endElseIfIndex + 1
 		} else if strings.HasPrefix(markup[i:], "{else}") {
-			/*
-				if openControl == nil || !openControl.isIfStmt {
-					return nil, fmt.Errorf("{else} at index %d missing opening {if}", i)
-				}
-			*/
+			if openControl == nil {
+				return nil, fmt.Errorf("{else} at index %d missing opening {if}", i)
+			}
 			newControl := control{
 				isElseStmt: true,
 				open:       true,
 			}
 
 			if openControl.isElseIfStmt {
-				fmt.Println(openControl.elseIfCondition)
 				openControl.open = false
 				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 				openControl = controlStack[len(controlStack)-1]
 			}
 			openControl.children = append(openControl.children, newControl)
 			controlStack = append(controlStack, &openControl.children[len(openControl.children)-1])
+			openControl = controlStack[len(controlStack)-1]
+
 			i += len("{else}")
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
 			if openControl == nil {
@@ -665,6 +663,11 @@ func buildControlTree(markup string) ([]control, error) {
 			}
 			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
+			if len(controlStack) > 0 {
+				openControl = controlStack[len(controlStack)-1]
+			} else {
+				openControl = nil
+			}
 			i += len("{/if}")
 		} else if strings.HasPrefix(markup[i:], "{/for}") {
 			if openControl == nil {
@@ -672,6 +675,11 @@ func buildControlTree(markup string) ([]control, error) {
 			}
 			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
+			if len(controlStack) > 0 {
+				openControl = controlStack[len(controlStack)-1]
+			} else {
+				openControl = nil
+			}
 			i += len("{/for}")
 		} else {
 			start := i
