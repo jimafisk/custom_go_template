@@ -49,16 +49,13 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	allVars := getAllVars(fence)
 	// Run the JS in Goja to get the computed values for props
 	props = evaluateProps(fence, allVars, props)
-	// Run template conditions {if}{else}{/if}
-	//markup = renderConditions(markup, props)
+	// Build AST with {if} and {for} controls + text nodes
 	controlTree, err := buildControlTree(markup)
 	if err != nil {
 		fmt.Println(err)
 	}
 	//markup = evalControlTree(controlTree, markup, script, style, props, components)
 	markup = evalControlTree(controlTree, props)
-	// Run template loops {for let _ in _}{/for} and {for let _ of _}{/for}
-	//markup = renderLoops(markup, props)
 	// Recursively render imported components
 	markup, script, style = renderComponents(markup, script, style, props, components)
 	// Create scoped classes and add to html
@@ -750,165 +747,6 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 	}
 
 	return result.String()
-}
-
-/*
-func evalControlStack(controlStack []control, markup string, props map[string]any) string {
-	stop := false
-	for _, currentControl := range controlStack {
-		if stop {
-			break
-		}
-		if currentControl.isIfStmt {
-			//if (!reflect.DeepEqual(currentControl.ifStmt, ifStmt{})) {
-			// Current control is an if statement
-			modifiedMarkup = evalIfStmt(currentControl.ifStmt, markup, props)
-		} else if currentControl.isForLoop {
-			//} else if (currentControl.forLoop != forLoop{}) {
-			// Current control is a for loop
-			modifiedMarkup, props = evalForLoop(currentControl.forLoop, markup, props)
-		}
-		modifiedMarkup := evalIfStmt(currentConditional, markup)
-		i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
-		markup = modifiedMarkup
-		// Remove current conditional from stack
-		conditionals = conditionals[:len(conditionals)-1]
-	}
-}
-
-func evalForLoop(currentForLoop forLoop, markup string, props map[string]any) {
-	forItems := evaluateLoop(anyToString(evalJS(currentForLoop.forCollection, props)))
-	if len(forItems) > 0 {
-
-	}
-
-}
-
-func evalIfStmt(currentIfStmt ifStmt, markup string, props map[string]any) {
-	endIfContentIndex := currentIfStmt.startCloseIfIndex
-
-	startOpenIfIndex := currentIfStmt.startOpenIfIndex
-	ifCondition := currentIfStmt.ifCondition
-
-	if isBoolAndTrue(evalJS(ifCondition, props)) {
-		startIfContentIndex := currentIfStmt.startIfContentIndex
-		if len(currentIfStmt.startElseIfIndexes) > 0 {
-			endIfContentIndex = currentIfStmt.startElseIfIndexes[0] - 1
-		} else if currentIfStmt.startElseIndex > 0 {
-			// Although 0 is a valid index, an {else} should never be in first position, so this is a valid way to check if "else" was set
-			endIfContentIndex = currentIfStmt.startElseIndex - 1
-		}
-
-		ifContent := markup[startIfContentIndex:endIfContentIndex]
-		modifiedMarkup := markup[:startOpenIfIndex] + ifContent + markup[startCloseIfIndex+len("{/if}"):]
-		i -= len(markup) - len(modifiedMarkup) // Move crawler back by amount of shrinkage
-		markup = modifiedMarkup
-	} else {
-		elseIfWasTrue := false
-		endElseIfContentIndex := endIfContentIndex
-		numOfConditions := len(currentConditional.elseIfConditions)
-		for condPos, elseIfCondition := range currentConditional.elseIfConditions {
-			if isBoolAndTrue(evalJS(elseIfCondition, props)) && !elseIfWasTrue {
-				elseIfWasTrue = true
-				startElseIfContentIndex := currentConditional.startElseIfContentIndexes[condPos]
-				if numOfConditions > condPos {
-					// If there are more else if conditions, the start of the next one is the end of the current one
-					endElseIfContentIndex = currentConditional.startElseIfIndexes[condPos+1]
-				}
-				if condPos == numOfConditions && currentConditional.startElseIndex > 0 {
-					// Last if else statement is true and there's an else after
-					endElseIfContentIndex = currentConditional.startElseIndex
-				}
-				currentElseIfContent := markup[startElseIfContentIndex:endElseIfContentIndex]
-				modifiedMarkup := markup[:startOpenIfIndex] + currentElseIfContent + markup[startCloseIfIndex+len("{/if}"):]
-				i -= len(markup) - len(modifiedMarkup)
-				markup = modifiedMarkup
-			}
-		}
-		if !elseIfWasTrue && currentConditional.startElseIndex > 0 {
-			startElseContentIndex := currentConditional.startElseContentIndex
-			currentElseContent := markup[startElseContentIndex:startCloseIfIndex]
-			modifiedMarkup := markup[:startOpenIfIndex] + currentElseContent + markup[startCloseIfIndex+len("{/if}"):]
-			i -= len(markup) - len(modifiedMarkup)
-			markup = modifiedMarkup
-		}
-	}
-}
-*/
-
-func renderConditions(markup string, props map[string]any) string {
-	reCondition := regexp.MustCompile(`(?s){(if)\s(.*?)}(.*?)(?:{(?:(else\sif)\s(.*?)}(.*?)|(?:(else))}(.*?))){0,}{/if}`)
-	matches := reCondition.FindAllStringSubmatch(markup, -1)
-	for _, match := range matches {
-		full_match := match[0]
-		for i, part := range match {
-			if part == "if" || part == "else if" {
-				condition := match[i+1]
-				result := match[i+2]
-				nestedIfIndex := strings.Index(result, "{if")
-				if nestedIfIndex >= 0 {
-					full_match = full_match[nestedIfIndex:]
-					markup = strings.Replace(markup, full_match, result, 1)
-				}
-				if isBoolAndTrue(evalJS(condition, props)) {
-					markup = strings.Replace(markup, full_match, result, 1)
-					break
-				}
-			}
-			if part == "else" {
-				result := match[i+1]
-				markup = strings.Replace(markup, full_match, result, 1)
-				break
-			}
-		}
-		markup = strings.Replace(markup, full_match, "", 1) // Did not match any conditions, just remove it
-	}
-	return markup
-}
-
-func renderLoops(markup string, props map[string]any) string {
-	reLoop := regexp.MustCompile(`(?s){for\slet\s(.*?)\s(of|in)\s(.*?)}(.*?){/for}`)
-	matches := reLoop.FindAllStringSubmatch(markup, -1)
-	for _, match := range matches {
-		full_match := match[0]
-		for i, part := range match {
-			if part == "of" {
-				iterator := match[i-1]
-				collection := match[i+1]
-				result := match[i+2]
-				full_result := ""
-				collection_value := evalJS(collection, props)
-				items := evaluateLoop(anyToString(collection_value))
-				for _, value := range items {
-					props[iterator] = value
-					full_result += evalAllBrackets(result, props)
-				}
-				markup = strings.Replace(markup, full_match, full_result, 1)
-				break
-			}
-			if part == "in" {
-				result := match[i+1]
-				markup = strings.Replace(markup, full_match, result, 1)
-				break
-			}
-		}
-		markup = strings.Replace(markup, full_match, "", 1) // Did not match any conditions, just remove it
-	}
-	return markup
-}
-
-func evaluateLoop(collection_value string) []string {
-	vm := goja.New()
-	v, err := vm.RunString(collection_value)
-	if err != nil {
-		log.Fatal(err)
-	}
-	var r []string
-	err = vm.ExportTo(v, &r)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return r
 }
 
 func getComponents(path, fence string) (string, []Component) {

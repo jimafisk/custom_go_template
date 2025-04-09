@@ -56,14 +56,22 @@ let comp = "mycomp";
 
 			<div class="animals">
 				{for let animal of ["new animal", ...animals]}
+					{if animal == "cat"}
+						<div>Hi {animal}!</div>
+					{else}
+						<div>Bye {animal}.</div>
+					{/if}
 					<div class="type-{animal}">{name} likes: {animal}s</div>
 					<div>Backwards: s{animal.split('').reverse().join('')}</div>
 					<button onclick="{animals.filter(a => a !== animal)}">Remove {animal}</button>
 					<br><br>
 				{/for}
+				{for var i of ["word", "up", "my", "homie"]}
+					{name} {i}
+				{/for}
 			</div>
 			<div>
-				<h3>Add new animal:</h3>
+				<h3>Add {i} new animal:</h3>
 				<input type="text" placeholder="animal name">
 				<button onclick="{animals = ['new', ...animals]}">Submit</button>
 			</div>
