@@ -540,7 +540,6 @@ type control struct {
 	textContent string
 
 	children []control
-	open     bool
 }
 
 func buildControlTree(markup string) ([]control, error) {
@@ -562,7 +561,6 @@ func buildControlTree(markup string) ([]control, error) {
 			newControl := control{
 				isIfStmt:    true,
 				ifCondition: ifCondition,
-				open:        true,
 			}
 
 			if openControl != nil {
@@ -593,7 +591,6 @@ func buildControlTree(markup string) ([]control, error) {
 				isForLoop:     true,
 				forVar:        matches[1],
 				forCollection: matches[2],
-				open:          true,
 			}
 			if openControl != nil {
 				openControl.children = append(openControl.children, newControl)
@@ -620,7 +617,6 @@ func buildControlTree(markup string) ([]control, error) {
 			elseIfCondition := markup[startElseIfIndex+len("{else if ") : endElseIfIndex]
 
 			if openControl.isElseIfStmt {
-				openControl.open = false
 				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 				openControl = controlStack[len(controlStack)-1]
 			}
@@ -628,7 +624,6 @@ func buildControlTree(markup string) ([]control, error) {
 			openControl.children = append(openControl.children, control{
 				isElseIfStmt:    true,
 				elseIfCondition: elseIfCondition,
-				open:            true,
 			})
 			controlStack = append(controlStack, &openControl.children[len(openControl.children)-1])
 			openControl = controlStack[len(controlStack)-1]
@@ -640,11 +635,9 @@ func buildControlTree(markup string) ([]control, error) {
 			}
 			newControl := control{
 				isElseStmt: true,
-				open:       true,
 			}
 
 			if openControl.isElseIfStmt {
-				openControl.open = false
 				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 				openControl = controlStack[len(controlStack)-1]
 			}
@@ -658,10 +651,8 @@ func buildControlTree(markup string) ([]control, error) {
 				return nil, fmt.Errorf("closing {/if} at index %d without opening {if}", i)
 			}
 			if openControl.isElseIfStmt || openControl.isElseStmt {
-				openControl.open = false
 				controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			}
-			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			if len(controlStack) > 0 {
 				openControl = controlStack[len(controlStack)-1]
@@ -673,7 +664,6 @@ func buildControlTree(markup string) ([]control, error) {
 			if openControl == nil {
 				return nil, fmt.Errorf("closing {/for} at index %d without opening {for}", i)
 			}
-			openControl.open = false
 			controlStack = controlStack[:len(controlStack)-1] // Pop from stack
 			if len(controlStack) > 0 {
 				openControl = controlStack[len(controlStack)-1]
@@ -696,7 +686,6 @@ func buildControlTree(markup string) ([]control, error) {
 				newControl := control{
 					isTextNode:  true,
 					textContent: markup[start:i],
-					open:        true,
 				}
 				if openControl != nil {
 					openControl.children = append(openControl.children, newControl)
@@ -717,24 +706,18 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 	var result strings.Builder
 
 	for _, ctrl := range controlTree {
-		//fmt.Println(ctrl)
 		if ctrl.isTextNode {
-			//fmt.Println(ctrl.textContent)
 			//markup, script, style = renderComponents(ctrl.textContent, script, style, props, components)
 			//result.WriteString(evalAllBrackets(markup, props))
 			result.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
-				//fmt.Println(ctrl.ifCondition)
 				result.WriteString(evalControlTree(ctrl.children, props))
 			} else {
-				//fmt.Println("else if")
 				evaluated := false
 				// Process else-if statements
 				for _, child := range ctrl.children {
-					//fmt.Println(child)
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
-						//fmt.Println(child.elseIfCondition)
 						result.WriteString(evalControlTree(child.children, props))
 						evaluated = true
 						break
