@@ -42,8 +42,7 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	// Split template into parts
 	markup, fence, script, style := templateParts(template)
 	// Get list of imported components and remove imports from fence
-	//fence, components := getComponents(path, fence)
-	fence, _ = getComponents(path, fence)
+	fence, components := getComponents(path, fence)
 	// Set the prop to the value that's passed in
 	fence, fence_logic := setProps(fence, props)
 	// Get list of all variables declared in fence
@@ -55,11 +54,9 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	if err != nil {
 		fmt.Println(err)
 	}
-	//markup = evalControlTree(controlTree, markup, script, style, props, components)
-	markup, new_script, new_style := evalControlTree(controlTree, props)
+	markup, new_script, new_style := evalControlTree(controlTree, props, components)
 	script += new_script
 	style += new_style
-	//markup, _, _ = evalControlTree(controlTree, props)
 	// Recursively render imported components
 	//markup, script, style = renderComponents(markup, script, style, props, components)
 	// Create scoped classes and add to html
@@ -524,6 +521,11 @@ func evalJS(jsCode string, props map[string]any) any {
 	return goja_value.Export()
 }
 
+// Helper function to check if a character is uppercase
+func isUpper(c byte) bool {
+	return c >= 'A' && c <= 'Z'
+}
+
 type control struct {
 	isIfStmt    bool
 	ifCondition string
@@ -541,6 +543,7 @@ type control struct {
 	textContent string
 
 	isComp    bool
+	compName  string
 	compProps map[string]any
 
 	isDynamicComp    bool
@@ -654,6 +657,35 @@ func buildControlTree(markup string) ([]control, error) {
 			openControl = controlStack[len(controlStack)-1]
 
 			i += len("{else}")
+		} else if i+1 < len(markup) && markup[i] == '<' && isUpper(markup[i+1]) {
+			startCompIndex := i
+			relativeEndCompIndex := strings.Index(markup[startCompIndex:], "/>")
+			if relativeEndCompIndex == -1 {
+				return nil, fmt.Errorf("Component missing closing \"/>\" at index %d", startCompIndex)
+			}
+			endCompIndex := startCompIndex + relativeEndCompIndex
+
+			startCompNameIndex := i + 1
+			relativeEndCompNameIndex := strings.Index(markup[startCompNameIndex:], " ")
+			endCompNameIndex := startCompNameIndex + relativeEndCompNameIndex
+
+			compName := markup[startCompNameIndex:endCompNameIndex]
+			compProps := markup[endCompNameIndex+1 : endCompIndex]
+
+			newControl := control{
+				isComp:    true,
+				compName:  compName,
+				compProps: getCompArgs(compProps),
+			}
+
+			// TODO: For now Comp won't have children (eventually add slot support)
+			if openControl != nil {
+				openControl.children = append(openControl.children, newControl)
+			} else {
+				controlTree = append(controlTree, newControl)
+			}
+
+			i = endCompIndex + len("/>")
 		} else if strings.HasPrefix(markup[i:], "<=") {
 			startDynamicCompIndex := i
 			relativeEndDynamicCompIndex := strings.Index(markup[startDynamicCompIndex:], "/>")
@@ -726,6 +758,7 @@ func buildControlTree(markup string) ([]control, error) {
 			start := i
 			for i < len(markup) &&
 				!strings.HasPrefix(markup[i:], "<=") &&
+				!(i+1 < len(markup) && markup[i] == '<' && isUpper(markup[i+1])) &&
 				!strings.HasPrefix(markup[i:], "{if ") &&
 				!strings.HasPrefix(markup[i:], "{for ") &&
 				!strings.HasPrefix(markup[i:], "{else if ") &&
@@ -753,7 +786,7 @@ func buildControlTree(markup string) ([]control, error) {
 	return controlTree, nil
 }
 
-func evalControlTree(controlTree []control, props map[string]any) (string, string, string) {
+func evalControlTree(controlTree []control, props map[string]any, components []Component) (string, string, string) {
 	var markupBuilder strings.Builder
 	var scriptBuilder strings.Builder
 	var styleBuilder strings.Builder
@@ -763,14 +796,14 @@ func evalControlTree(controlTree []control, props map[string]any) (string, strin
 			markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
-				markup, _, _ := evalControlTree(ctrl.children, props)
+				markup, _, _ := evalControlTree(ctrl.children, props, components)
 				markupBuilder.WriteString(markup)
 			} else {
 				evaluated := false
 				// Process else-if statements
 				for _, child := range ctrl.children {
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
-						markup, _, _ := evalControlTree(child.children, props)
+						markup, _, _ := evalControlTree(child.children, props, components)
 						markupBuilder.WriteString(markup)
 						evaluated = true
 						break
@@ -780,7 +813,7 @@ func evalControlTree(controlTree []control, props map[string]any) (string, strin
 				if !evaluated {
 					for _, child := range ctrl.children {
 						if child.isElseStmt {
-							markup, _, _ := evalControlTree(child.children, props)
+							markup, _, _ := evalControlTree(child.children, props, components)
 							markupBuilder.WriteString(markup)
 							break
 						}
@@ -797,10 +830,30 @@ func evalControlTree(controlTree []control, props map[string]any) (string, strin
 						newProps[k] = v
 					}
 					newProps[ctrl.forVar] = item
-					markup, _, _ := evalControlTree(ctrl.children, newProps)
+					markup, _, _ := evalControlTree(ctrl.children, newProps, components)
 					markupBuilder.WriteString(markup)
 				}
 			}
+		} else if ctrl.isComp {
+			newProps := make(map[string]any)
+			for prop_name, prop_value := range ctrl.compProps {
+				// Evaluate the passed in props within the context of the parent comp
+				newProps[prop_name] = evalJS(fmt.Sprintf(`%s`, prop_value), props)
+			}
+			var compPath string
+			for _, comp := range components {
+				if comp.Name == ctrl.compName {
+					compPath = comp.Path
+				}
+			}
+			markup, script, style, fence_logic := Render(compPath, newProps)
+			// Create scoped classes and add to html
+			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
+			// Add scoped classes to css
+			style, _ = scopeCSS(style, scopedElements)
+			markupBuilder.WriteString(markup)
+			scriptBuilder.WriteString(script)
+			styleBuilder.WriteString(style)
 		} else if ctrl.isDynamicComp {
 			newProps := make(map[string]any)
 			for prop_name, prop_value := range ctrl.dynamicCompProps {
@@ -816,7 +869,6 @@ func evalControlTree(controlTree []control, props map[string]any) (string, strin
 			markupBuilder.WriteString(markup)
 			scriptBuilder.WriteString(script)
 			styleBuilder.WriteString(style)
-			fmt.Println(styleBuilder.String())
 		}
 	}
 
