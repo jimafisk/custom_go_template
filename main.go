@@ -96,7 +96,7 @@ func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
 	return markup, scopedElements
 }
 
-func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[string]any, fence_logic string) (string, []scopedElement) {
+func scopeHTMLComp(comp_markup string, comp_props map[string]any, fence_logic string) (string, []scopedElement) {
 	// We scope components differently than the full document
 	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
 	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
@@ -116,7 +116,7 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any, comp_data map[
 		node, scopedElements = traverse(node, scopedElements, comp_props)
 
 		if len(comp_props) > 0 {
-			x_data_str, x_init_str := makeGetter(comp_data, fence_logic)
+			x_data_str, x_init_str := makeGetter(comp_props, fence_logic)
 			attr := html.Attribute{
 				Key: "x-data",
 				Val: x_data_str,
@@ -536,6 +536,13 @@ type control struct {
 	isTextNode  bool
 	textContent string
 
+	isComp    bool
+	compProps map[string]any
+
+	isDynamicComp    bool
+	dynamicCompPath  string
+	dynamicCompProps map[string]any
+
 	children []control
 }
 
@@ -643,6 +650,49 @@ func buildControlTree(markup string) ([]control, error) {
 			openControl = controlStack[len(controlStack)-1]
 
 			i += len("{else}")
+		} else if strings.HasPrefix(markup[i:], "<=") {
+			startDynamicCompIndex := i
+			relativeEndDynamicCompIndex := strings.Index(markup[startDynamicCompIndex:], "/>")
+			if relativeEndDynamicCompIndex == -1 {
+				return nil, fmt.Errorf("<= dynamic comp missing closing \"/>\" at index %d", startDynamicCompIndex)
+			}
+			endDynamicCompIndex := startDynamicCompIndex + relativeEndDynamicCompIndex
+
+			startDynamicCompPathIndex := startDynamicCompIndex + len("<='")
+			// TODO: dynamic paths now need to be wrapped in either single or double quotes
+			relativeEndDynamicCompPathIndex := strings.IndexAny(markup[startDynamicCompPathIndex:], "'\"")
+			endDynamicCompPathIndex := startDynamicCompPathIndex + relativeEndDynamicCompPathIndex
+			dynamicCompPath := markup[startDynamicCompPathIndex:endDynamicCompPathIndex]
+			dynamicCompProps := markup[endDynamicCompPathIndex+1 : endDynamicCompIndex]
+			/*
+				reDynamicComponent := regexp.MustCompile(`<=(".*?"|'.*?'|{.*?})\s(.*?)?(?:\s)?/>`)
+				matches := reDynamicComponent.FindAllStringSubmatch(markup, -1)
+				var comp_path string
+				var comp_props map[string]any
+				for _, match := range matches {
+					if len(match) > 0 {
+						comp_path = strings.Trim(match[1], "\"")
+					}
+					if len(match) > 1 {
+						comp_props = getCompArgs(match[2])
+					}
+				}
+			*/
+
+			newControl := control{
+				isDynamicComp:    true,
+				dynamicCompPath:  strings.Trim(dynamicCompPath, "'\""),
+				dynamicCompProps: getCompArgs(dynamicCompProps),
+			}
+
+			// TODO: For now dynamicComp won't have children (eventually add slot support)
+			if openControl != nil {
+				openControl.children = append(openControl.children, newControl)
+			} else {
+				controlTree = append(controlTree, newControl)
+			}
+
+			i = endDynamicCompIndex + len("/>")
 		} else if strings.HasPrefix(markup[i:], "{/if}") {
 			if openControl == nil {
 				return nil, fmt.Errorf("closing {/if} at index %d without opening {if}", i)
@@ -671,6 +721,7 @@ func buildControlTree(markup string) ([]control, error) {
 		} else {
 			start := i
 			for i < len(markup) &&
+				!strings.HasPrefix(markup[i:], "<=") &&
 				!strings.HasPrefix(markup[i:], "{if ") &&
 				!strings.HasPrefix(markup[i:], "{for ") &&
 				!strings.HasPrefix(markup[i:], "{else if ") &&
@@ -743,6 +794,18 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 					result.WriteString(evalControlTree(ctrl.children, newProps))
 				}
 			}
+		} else if ctrl.isDynamicComp {
+			newProps := make(map[string]any)
+			for prop_name, prop_value := range ctrl.dynamicCompProps {
+				// Evaluate the passed in props within the context of the parent comp
+				newProps[prop_name] = evalJS(fmt.Sprintf(`%s`, prop_value), props)
+			}
+			evaluatedCompPath := evalAllBrackets(ctrl.dynamicCompPath, props)
+			markup, script, style, fence_logic := Render(evaluatedCompPath, newProps)
+			result.WriteString(markup)
+			fmt.Println(script)
+			fmt.Println(style)
+			fmt.Println(fence_logic)
 		}
 	}
 
@@ -773,16 +836,14 @@ func getComponents(path, fence string) (string, []Component) {
 	return fence, components
 }
 
-func getCompArgs(comp_args []string, props map[string]any) (map[string]any, map[string]any) {
+func getCompArgs(comp_decl string) map[string]any {
+	comp_args := strings.SplitAfter(comp_decl, "}")
 	comp_props := map[string]any{}
-	comp_data := map[string]any{}
 	for _, comp_arg := range comp_args {
 		comp_arg = strings.TrimSpace(comp_arg)
 		if strings.HasPrefix(comp_arg, "{") && strings.HasSuffix(comp_arg, "}") {
 			prop_name := strings.Trim(comp_arg, "{}")
-			prop_value := props[prop_name]
-			comp_props[prop_name] = prop_value
-			comp_data[prop_name] = prop_name
+			comp_props[prop_name] = prop_name
 		}
 		if strings.Contains(comp_arg, "={") && strings.HasSuffix(comp_arg, "}") {
 			nameEndPos := strings.IndexRune(comp_arg, '=')
@@ -790,13 +851,11 @@ func getCompArgs(comp_args []string, props map[string]any) (map[string]any, map[
 
 			valueStartPos := strings.IndexRune(comp_arg, '{')
 			valueEndPos := strings.IndexRune(comp_arg, '}')
-			prop_value := evalJS(comp_arg[valueStartPos+1:valueEndPos], props)
 
-			comp_props[prop_name] = prop_value
-			comp_data[prop_name] = comp_arg[valueStartPos+1 : valueEndPos]
+			comp_props[prop_name] = comp_arg[valueStartPos+1 : valueEndPos]
 		}
 	}
-	return comp_props, comp_data
+	return comp_props
 }
 
 func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
@@ -806,12 +865,11 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 		matches := reComponent.FindAllStringSubmatch(markup, -1)
 		for _, match := range matches {
 			if len(match) > 1 {
-				comp_args := strings.SplitAfter(match[1], "}")
-				comp_props, comp_data := getCompArgs(comp_args, props)
+				comp_props := getCompArgs(match[1])
 				// Recursively render imports
 				comp_markup, comp_script, comp_style, fence_logic := Render(component.Path, comp_props)
 				// Create scoped classes and add to html
-				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data, fence_logic)
+				comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, fence_logic)
 				// Add scoped classes to css
 				comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 				// Add scoped classes to js
@@ -836,12 +894,11 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 			if strings.Contains(comp_path, `{`) && strings.Contains(comp_path, `}`) {
 				comp_path = evalAllBrackets(comp_path, props)
 			}
-			comp_args := strings.SplitAfter(match[2], "}")
-			comp_props, comp_data := getCompArgs(comp_args, props)
+			comp_props := getCompArgs(match[2])
 			comp_path = strings.Trim(comp_path, "\"'`") // Remove backticks, single and double quotes
 			comp_markup, comp_script, comp_style, fence_logic := Render(comp_path, comp_props)
 			// Create scoped classes and add to html
-			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, comp_data, fence_logic)
+			comp_markup, comp_scopedElements := scopeHTMLComp(comp_markup, comp_props, fence_logic)
 			// Add scoped classes to css
 			comp_style, _ = scopeCSS(comp_style, comp_scopedElements)
 
