@@ -42,7 +42,8 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	// Split template into parts
 	markup, fence, script, style := templateParts(template)
 	// Get list of imported components and remove imports from fence
-	fence, components := getComponents(path, fence)
+	//fence, components := getComponents(path, fence)
+	fence, _ = getComponents(path, fence)
 	// Set the prop to the value that's passed in
 	fence, fence_logic := setProps(fence, props)
 	// Get list of all variables declared in fence
@@ -55,9 +56,12 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 		fmt.Println(err)
 	}
 	//markup = evalControlTree(controlTree, markup, script, style, props, components)
-	markup = evalControlTree(controlTree, props)
+	markup, new_script, new_style := evalControlTree(controlTree, props)
+	script += new_script
+	style += new_style
+	//markup, _, _ = evalControlTree(controlTree, props)
 	// Recursively render imported components
-	markup, script, style = renderComponents(markup, script, style, props, components)
+	//markup, script, style = renderComponents(markup, script, style, props, components)
 	// Create scoped classes and add to html
 	markup, scopedElements := scopeHTML(markup, props)
 	// Add scoped classes to css
@@ -749,24 +753,25 @@ func buildControlTree(markup string) ([]control, error) {
 	return controlTree, nil
 }
 
-func evalControlTree(controlTree []control, props map[string]any) string {
-	//func evalControlTree(controlTree []control, markup, script, style string, props map[string]any, components []Component) string {
-	var result strings.Builder
+func evalControlTree(controlTree []control, props map[string]any) (string, string, string) {
+	var markupBuilder strings.Builder
+	var scriptBuilder strings.Builder
+	var styleBuilder strings.Builder
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
-			//markup, script, style = renderComponents(ctrl.textContent, script, style, props, components)
-			//result.WriteString(evalAllBrackets(markup, props))
-			result.WriteString(evalAllBrackets(ctrl.textContent, props))
+			markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
-				result.WriteString(evalControlTree(ctrl.children, props))
+				markup, _, _ := evalControlTree(ctrl.children, props)
+				markupBuilder.WriteString(markup)
 			} else {
 				evaluated := false
 				// Process else-if statements
 				for _, child := range ctrl.children {
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
-						result.WriteString(evalControlTree(child.children, props))
+						markup, _, _ := evalControlTree(child.children, props)
+						markupBuilder.WriteString(markup)
 						evaluated = true
 						break
 					}
@@ -775,7 +780,8 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 				if !evaluated {
 					for _, child := range ctrl.children {
 						if child.isElseStmt {
-							result.WriteString(evalControlTree(child.children, props))
+							markup, _, _ := evalControlTree(child.children, props)
+							markupBuilder.WriteString(markup)
 							break
 						}
 					}
@@ -791,7 +797,8 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 						newProps[k] = v
 					}
 					newProps[ctrl.forVar] = item
-					result.WriteString(evalControlTree(ctrl.children, newProps))
+					markup, _, _ := evalControlTree(ctrl.children, newProps)
+					markupBuilder.WriteString(markup)
 				}
 			}
 		} else if ctrl.isDynamicComp {
@@ -802,14 +809,18 @@ func evalControlTree(controlTree []control, props map[string]any) string {
 			}
 			evaluatedCompPath := evalAllBrackets(ctrl.dynamicCompPath, props)
 			markup, script, style, fence_logic := Render(evaluatedCompPath, newProps)
-			result.WriteString(markup)
-			fmt.Println(script)
-			fmt.Println(style)
-			fmt.Println(fence_logic)
+			// Create scoped classes and add to html
+			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
+			// Add scoped classes to css
+			style, _ = scopeCSS(style, scopedElements)
+			markupBuilder.WriteString(markup)
+			scriptBuilder.WriteString(script)
+			styleBuilder.WriteString(style)
+			fmt.Println(styleBuilder.String())
 		}
 	}
 
-	return result.String()
+	return markupBuilder.String(), scriptBuilder.String(), styleBuilder.String()
 }
 
 func getComponents(path, fence string) (string, []Component) {
