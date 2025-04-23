@@ -54,9 +54,9 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 	if err != nil {
 		fmt.Println(err)
 	}
-	markup, new_script, new_style := evalControlTree(controlTree, props, components)
-	script += new_script
-	style += new_style
+	markup, new_script, new_style := evalControlTree(controlTree, script, style, props, components)
+	fmt.Println("++++++++++++++++")
+	fmt.Println(new_style)
 	// Recursively render imported components
 	//markup, script, style = renderComponents(markup, script, style, props, components)
 	// Create scoped classes and add to html
@@ -69,6 +69,9 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 		panic(err)
 	}
 	script = ast.JSString()
+
+	script += new_script
+	style += new_style
 
 	return markup, script, style, fence_logic
 }
@@ -700,20 +703,6 @@ func buildControlTree(markup string) ([]control, error) {
 			endDynamicCompPathIndex := startDynamicCompPathIndex + relativeEndDynamicCompPathIndex
 			dynamicCompPath := markup[startDynamicCompPathIndex:endDynamicCompPathIndex]
 			dynamicCompProps := markup[endDynamicCompPathIndex+1 : endDynamicCompIndex]
-			/*
-				reDynamicComponent := regexp.MustCompile(`<=(".*?"|'.*?'|{.*?})\s(.*?)?(?:\s)?/>`)
-				matches := reDynamicComponent.FindAllStringSubmatch(markup, -1)
-				var comp_path string
-				var comp_props map[string]any
-				for _, match := range matches {
-					if len(match) > 0 {
-						comp_path = strings.Trim(match[1], "\"")
-					}
-					if len(match) > 1 {
-						comp_props = getCompArgs(match[2])
-					}
-				}
-			*/
 
 			newControl := control{
 				isDynamicComp:    true,
@@ -786,25 +775,32 @@ func buildControlTree(markup string) ([]control, error) {
 	return controlTree, nil
 }
 
-func evalControlTree(controlTree []control, props map[string]any, components []Component) (string, string, string) {
+func evalControlTree(controlTree []control, script string, style string, props map[string]any, components []Component) (string, string, string) {
 	var markupBuilder strings.Builder
 	var scriptBuilder strings.Builder
 	var styleBuilder strings.Builder
+
+	scriptBuilder.WriteString(script)
+	styleBuilder.WriteString(style)
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
 			markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
-				markup, _, _ := evalControlTree(ctrl.children, props, components)
+				markup, script, style := evalControlTree(ctrl.children, script, style, props, components)
 				markupBuilder.WriteString(markup)
+				scriptBuilder.WriteString(script)
+				styleBuilder.WriteString(style)
 			} else {
 				evaluated := false
 				// Process else-if statements
 				for _, child := range ctrl.children {
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
-						markup, _, _ := evalControlTree(child.children, props, components)
+						markup, script, style := evalControlTree(child.children, script, style, props, components)
 						markupBuilder.WriteString(markup)
+						scriptBuilder.WriteString(script)
+						styleBuilder.WriteString(style)
 						evaluated = true
 						break
 					}
@@ -813,8 +809,10 @@ func evalControlTree(controlTree []control, props map[string]any, components []C
 				if !evaluated {
 					for _, child := range ctrl.children {
 						if child.isElseStmt {
-							markup, _, _ := evalControlTree(child.children, props, components)
+							markup, script, style := evalControlTree(child.children, script, style, props, components)
 							markupBuilder.WriteString(markup)
+							scriptBuilder.WriteString(script)
+							styleBuilder.WriteString(style)
 							break
 						}
 					}
@@ -830,8 +828,10 @@ func evalControlTree(controlTree []control, props map[string]any, components []C
 						newProps[k] = v
 					}
 					newProps[ctrl.forVar] = item
-					markup, _, _ := evalControlTree(ctrl.children, newProps, components)
+					markup, script, style := evalControlTree(ctrl.children, script, style, newProps, components)
 					markupBuilder.WriteString(markup)
+					scriptBuilder.WriteString(script)
+					styleBuilder.WriteString(style)
 				}
 			}
 		} else if ctrl.isComp {
@@ -851,6 +851,8 @@ func evalControlTree(controlTree []control, props map[string]any, components []C
 			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
 			// Add scoped classes to css
 			style, _ = scopeCSS(style, scopedElements)
+			// Add scoped classes to js
+			//script = scopeJS(script, scopedElements)
 			markupBuilder.WriteString(markup)
 			scriptBuilder.WriteString(script)
 			styleBuilder.WriteString(style)
@@ -866,12 +868,16 @@ func evalControlTree(controlTree []control, props map[string]any, components []C
 			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
 			// Add scoped classes to css
 			style, _ = scopeCSS(style, scopedElements)
+			// Add scoped classes to js
+			//script = scopeJS(script, scopedElements)
 			markupBuilder.WriteString(markup)
 			scriptBuilder.WriteString(script)
 			styleBuilder.WriteString(style)
 		}
 	}
 
+	fmt.Println("================")
+	fmt.Println(styleBuilder.String())
 	return markupBuilder.String(), scriptBuilder.String(), styleBuilder.String()
 }
 
@@ -921,6 +927,7 @@ func getCompArgs(comp_decl string) map[string]any {
 	return comp_props
 }
 
+/*
 func renderComponents(markup, script, style string, props map[string]any, components []Component) (string, string, string) {
 	// Handle staticly imported components
 	for _, component := range components {
@@ -977,6 +984,7 @@ func renderComponents(markup, script, style string, props map[string]any, compon
 
 	return markup, script, style
 }
+*/
 
 func formatArray(value any) string {
 	val := reflect.ValueOf(value)
@@ -1055,7 +1063,8 @@ func makeGetter(comp_data map[string]any, fence_logic string) (string, string) {
 	for k, v := range comp_data {
 		params = append(params, k)
 
-		value_str := fmt.Sprintf("%s", v) // Any to string
+		//value_str := fmt.Sprintf("%v", v) // Any to string
+		value_str := anyToString(v)
 		value_str = makeAttrStr(value_str)
 
 		for prop_name, _ := range comp_data {
