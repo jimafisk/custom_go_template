@@ -47,7 +47,7 @@ func RecursiveRender(path string, props map[string]any, scopeStack []scopeStackI
 	if err != nil {
 		fmt.Println(err)
 	}
-	markup, script, scopeStack = evalControlTree(controlTree, script, scopeStack, props, components)
+	markup, scopeStack = evalControlTree(controlTree, script, scopeStack, props, components)
 
 	return markup, script, style, scopeStack, fence_logic
 }
@@ -70,72 +70,85 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 func evalScopeStack(scopeStack []scopeStackItem) (string, string) {
 	//var styleBuilder strings.Builder
 	//var scriptBuilder strings.Builder
-	out := ""
+	style := ""
+	script := ""
 
 	for _, stackItem := range scopeStack {
+		if stackItem.script != "" {
+			// Add scoped classes to js
+			script += scopeJS(stackItem.script, stackItem.scopedElements)
+		}
 		// Process style with CSS parser
 		if stackItem.style != "" {
-			// Parse CSS using parse.NewInputString
-			p := css.NewParser(parse.NewInputString(stackItem.style), false)
-			for {
-				gt, _, data := p.Next()
-				if gt == css.ErrorGrammar {
-					break
-				}
-				if gt == css.ErrorGrammar {
-					break
-				} else if gt == css.AtRuleGrammar || gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar || gt == css.DeclarationGrammar {
-					out += string(data)
-					if gt == css.DeclarationGrammar {
-						out += ":"
-					}
-					for i, val := range p.Values() {
-						//fmt.Println(val)
-						if val.TokenType == css.HashToken {
-							// CSS ID
-							scopedClass := getScopedClass(string(val.Data), "id", stackItem.scopedElements)
-							if scopedClass != "" {
-								out += string(val.Data) + "." + scopedClass
-							} else {
-								out += string(val.Data)
-							}
-						} else if val.TokenType == css.IdentToken {
-							if i > 0 && p.Values()[i-1].TokenType == css.DelimToken {
-								// CSS Class
-								scopedClass := getScopedClass(string(val.Data), "class", stackItem.scopedElements)
-								if scopedClass != "" {
-									out += string(val.Data) + "." + scopedClass
-								} else {
-									out += string(val.Data)
-								}
-							} else {
-								scopedClass := getScopedClass(string(val.Data), "tag", stackItem.scopedElements)
-								// TODO: This not only captures tags / elements, but styles (e.g. red, bold, 2rem) too
-								// The styles shouldn't return a scopedClass, but we should filter these intentionally
-								if scopedClass != "" {
-									out += string(val.Data) + "." + scopedClass
-								} else {
-									out += string(val.Data)
-								}
-							}
-						} else {
-							out += string(val.Data)
-						}
-					}
-					if gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar {
-						out += "{"
-					} else if gt == css.AtRuleGrammar || gt == css.DeclarationGrammar {
-						out += ";"
-					}
-				} else {
-					out += string(data)
-				}
-			}
+			// Add scoped classes to CSS
+			style += scopeCSS(stackItem.style, stackItem.scopedElements)
 		}
 	}
 
 	//return styleBuilder.String(), scriptBuilder.String()
-	return out, ""
+	return style, script
+}
+
+func scopeCSS(style string, scopedElements []scopedElement) string {
+	out := ""
+
+	// Create new CSS Parser
+	p := css.NewParser(parse.NewInputString(style), false)
+	for {
+		gt, _, data := p.Next()
+		if gt == css.ErrorGrammar {
+			break
+		}
+		if gt == css.ErrorGrammar {
+			break
+		} else if gt == css.AtRuleGrammar || gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar || gt == css.DeclarationGrammar {
+			out += string(data)
+			if gt == css.DeclarationGrammar {
+				out += ":"
+			}
+			for i, val := range p.Values() {
+				if val.TokenType == css.HashToken {
+					// CSS ID
+					scopedClass := getScopedClass(string(val.Data), "id", scopedElements)
+					if scopedClass != "" {
+						out += string(val.Data) + "." + scopedClass
+					} else {
+						out += string(val.Data)
+					}
+				} else if val.TokenType == css.IdentToken {
+					if i > 0 && p.Values()[i-1].TokenType == css.DelimToken {
+						// CSS Class
+						scopedClass := getScopedClass(string(val.Data), "class", scopedElements)
+						if scopedClass != "" {
+							out += string(val.Data) + "." + scopedClass
+						} else {
+							out += string(val.Data)
+						}
+					} else {
+						scopedClass := getScopedClass(string(val.Data), "tag", scopedElements)
+						// TODO: This not only captures tags / elements, but styles (e.g. red, bold, 2rem) too
+						// The styles shouldn't return a scopedClass, but we should filter these intentionally
+						if scopedClass != "" {
+							out += string(val.Data) + "." + scopedClass
+						} else {
+							out += string(val.Data)
+						}
+					}
+				} else {
+					out += string(val.Data)
+				}
+			}
+			if gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar {
+				out += "{"
+			} else if gt == css.AtRuleGrammar || gt == css.DeclarationGrammar {
+				out += ";"
+			}
+		} else {
+			out += string(data)
+		}
+	}
+
+	return out
 }
 
 func formatJS(script string) string {
@@ -799,27 +812,24 @@ type scopeStackItem struct {
 	script         string
 }
 
-func evalControlTree(controlTree []control, script string, scopeStack []scopeStackItem, props map[string]any, components []Component) (string, string, []scopeStackItem) {
+func evalControlTree(controlTree []control, script string, scopeStack []scopeStackItem, props map[string]any, components []Component) (string, []scopeStackItem) {
 	var markupBuilder strings.Builder
-	var scriptBuilder strings.Builder
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
 			markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
-				markup, script, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, props, components)
+				markup, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, props, components)
 				markupBuilder.WriteString(markup)
-				scriptBuilder.WriteString(script)
 				scopeStack = newScopeStack
 			} else {
 				evaluated := false
 				// Process else-if statements
 				for _, child := range ctrl.children {
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
-						markup, script, newScopeStack := evalControlTree(child.children, script, scopeStack, props, components)
+						markup, newScopeStack := evalControlTree(child.children, script, scopeStack, props, components)
 						markupBuilder.WriteString(markup)
-						scriptBuilder.WriteString(script)
 						scopeStack = newScopeStack
 						evaluated = true
 						break
@@ -829,9 +839,8 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 				if !evaluated {
 					for _, child := range ctrl.children {
 						if child.isElseStmt {
-							markup, script, newScopeStack := evalControlTree(child.children, script, scopeStack, props, components)
+							markup, newScopeStack := evalControlTree(child.children, script, scopeStack, props, components)
 							markupBuilder.WriteString(markup)
-							scriptBuilder.WriteString(script)
 							scopeStack = newScopeStack
 							break
 						}
@@ -848,9 +857,8 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 						newProps[k] = v
 					}
 					newProps[ctrl.forVar] = item
-					markup, script, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, newProps, components)
+					markup, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, newProps, components)
 					markupBuilder.WriteString(markup)
-					scriptBuilder.WriteString(script)
 					scopeStack = newScopeStack
 				}
 			}
@@ -876,10 +884,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 				script:         script,
 			})
 			scopeStack = newScopeStack
-			// Add scoped classes to js
-			script = scopeJS(script, scopedElements)
 			markupBuilder.WriteString(markup)
-			scriptBuilder.WriteString(script)
 		} else if ctrl.isDynamicComp {
 			newProps := make(map[string]any)
 			for prop_name, prop_value := range ctrl.dynamicCompProps {
@@ -897,13 +902,11 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 				script:         script,
 			})
 			scopeStack = newScopeStack
-			script = scopeJS(script, scopedElements)
 			markupBuilder.WriteString(markup)
-			scriptBuilder.WriteString(script)
 		}
 	}
 
-	return markupBuilder.String(), scriptBuilder.String(), scopeStack
+	return markupBuilder.String(), scopeStack
 }
 
 func getComponents(path, fence string) (string, []Component) {
