@@ -32,15 +32,8 @@ type Component struct {
 
 // Render renders the template with the given data
 func RecursiveRender(path string, props map[string]any, scopeStack []scopeStackItem) (string, string, string, []scopeStackItem, string) {
-
-	c, err := os.ReadFile(path)
-	if err != nil {
-		log.Fatal(err)
-	}
-	template := string(c)
-
 	// Split template into parts
-	markup, fence, script, style := templateParts(template)
+	markup, fence, script, style := templateParts(path)
 	// Get list of imported components and remove imports from fence
 	fence, components := getComponents(path, fence)
 	// Set the prop to the value that's passed in
@@ -54,15 +47,12 @@ func RecursiveRender(path string, props map[string]any, scopeStack []scopeStackI
 	if err != nil {
 		fmt.Println(err)
 	}
-	//styleTree := buildStyleTree(style)
 	markup, script, scopeStack = evalControlTree(controlTree, script, scopeStack, props, components)
 
 	return markup, script, style, scopeStack, fence_logic
 }
 
 func Render(path string, props map[string]any) (string, string, string, string) {
-	//scopeStack := []scopeStackItem{}
-	//markup, script, style, scopeStack, fence_logic := RecursiveRender(path, props, scopeStack)
 	markup, script, style, scopeStack, fence_logic := RecursiveRender(path, props, []scopeStackItem{})
 	// Create scoped classes and add to html
 	markup, scopedElements := scopeHTML(markup, props)
@@ -72,20 +62,7 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 		script:         script,
 	})
 	// Add scoped classes to css
-	/*
-		styleTree = scopeCSS(styleTree, scopedElements)
-		script = scopeJS(script, scopedElements)
-		script = formatJS(script)
-
-		style := evalStyleTree(styleTree)
-	*/
-	//fmt.Println(scopedElements)
-
-	// TODO: loop through scopedStack, check CSS selectors against scopedElements and modify them
-	// to use the scopedClass
-	//fmt.Println(scopeStack)
 	style, script = evalScopeStack(scopeStack)
-	//fmt.Println(style)
 
 	return markup, script, style, fence_logic
 }
@@ -338,177 +315,6 @@ type css_selector struct {
 	scopedClass string
 }
 
-/*
-func buildStyleTree(style string) []css_selectors {
-	ss := css.Parse(style)
-	rules := ss.GetCSSRuleList()
-	selectors := []css_selectors{}
-	for rule_index, rule := range rules {
-		tokens := rule.Style.Selector.Tokens
-		selectorStr := rule.Style.Selector.Text()
-		selectors = append(selectors, css_selectors{
-			selectorStr: selectorStr,
-			selectorArr: []css_selector{{}},
-		})
-		for _, style := range rule.Style.Styles {
-			selectors[rule_index].style += style.Text() + ";"
-		}
-		selector_index := 0
-		for i, token := range tokens {
-			if token.Type.String() == "S" && i+1 != len(tokens) {
-				// Space indicates a nested selector
-				selector_index++
-				selectors[rule_index].selectorArr = append(selectors[rule_index].selectorArr, css_selector{})
-			}
-			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
-				// Found HTML Element
-				tag := token.Value
-				selectors[rule_index].selectorArr[selector_index].tag = tag
-			}
-			if token.Type.String() == "CHAR" && token.Value == "." && i+1 < len(tokens) {
-				// Found CSS Class
-				class := tokens[i+1].Value
-				selectors[rule_index].selectorArr[selector_index].classes = append(selectors[rule_index].selectorArr[selector_index].classes, class)
-			}
-			if token.Type.String() == "HASH" {
-				// Found CSS ID
-				id := strings.TrimPrefix(token.Value, "#")
-				selectors[rule_index].selectorArr[selector_index].id = id
-			}
-		}
-	}
-
-	return selectors
-}
-
-func evalStyleTree(styleTree []css_selectors) string {
-	var styleBuilder strings.Builder
-	for _, ss := range styleTree {
-		for _, s := range ss.selectorArr {
-			if s.scopedClass != "" {
-				if !strings.Contains(ss.selectorStr, ".plenti") {
-					if s.tag != "" {
-						// TODO: Should build output, not string replace
-						// If div > div you will get double classes because replaces for each
-						// But this whole thing is messy and should be rewritten
-						ss.selectorStr = strings.ReplaceAll(ss.selectorStr, s.tag, s.tag+"."+s.scopedClass)
-					}
-					if s.id != "" {
-						ss.selectorStr = strings.ReplaceAll(ss.selectorStr, s.id, s.id+"."+s.scopedClass)
-					}
-					for _, sc := range s.classes {
-						ss.selectorStr = strings.ReplaceAll(ss.selectorStr, sc, sc+"."+s.scopedClass)
-					}
-				}
-			}
-		}
-		styleBuilder.Write([]byte(ss.selectorStr + "{" + ss.style + "}"))
-	}
-	return styleBuilder.String()
-}
-
-func scopeCSS(styleTree []css_selectors, scopedElements []scopedElement) []css_selectors {
-	for ssi, ss := range styleTree {
-		for si, s := range ss.selectorArr {
-			if s.scopedClass != "" {
-				// Already been scoped
-				continue
-			}
-			for _, e := range scopedElements {
-				if s.tag != "" && s.tag == e.tag {
-					styleTree[ssi].selectorArr[si].scopedClass = e.scopedClass
-				}
-				if s.id != "" && s.id == e.id {
-					styleTree[ssi].selectorArr[si].scopedClass = e.scopedClass
-				}
-				for _, sc := range s.classes {
-					for _, ec := range e.classes {
-						if sc != "" && sc == ec {
-							styleTree[ssi].selectorArr[si].scopedClass = e.scopedClass
-						}
-					}
-				}
-			}
-		}
-	}
-	return styleTree
-}
-*/
-
-/*
-func scopeCSS(style string, scopedElements []scopedElement) (string, []css_selectors) {
-	ss := css.Parse(style)
-	rules := ss.GetCSSRuleList()
-	selectors := []css_selectors{}
-	for rule_index, rule := range rules {
-		tokens := rule.Style.Selector.Tokens
-		selectorStr := rule.Style.Selector.Text()
-		selectors = append(selectors, css_selectors{
-			selectorStr: selectorStr,
-			selectorArr: []css_selector{{}},
-		})
-		for _, style := range rule.Style.Styles {
-			selectors[rule_index].style += style.Text() + ";"
-		}
-		selector_index := 0
-		for i, token := range tokens {
-			if token.Type.String() == "S" && i+1 != len(tokens) {
-				// Space indicates a nested selector
-				selector_index++
-				selectors[rule_index].selectorArr = append(selectors[rule_index].selectorArr, css_selector{})
-			}
-			if token.Type.String() == "IDENT" && (i < 1 || tokens[i-1].Value != ".") {
-				// Found HTML Element
-				tag := token.Value
-				//selectors[rule_index].selectorArr[selector_index].tag = tag
-				for _, e := range scopedElements {
-					//if e.tag == tag && !strings.Contains(style, tag+".plenti-") {
-					if e.tag == tag {
-						//style = strings.ReplaceAll(style, tag, tag+"."+e.scopedClass)
-						selectors[rule_index].selectorArr[selector_index].tag = tag + "." + e.scopedClass
-						continue
-					}
-				}
-			}
-			if token.Type.String() == "CHAR" && token.Value == "." && i+1 < len(tokens) {
-				// Found CSS Class
-				class := tokens[i+1].Value
-				//selectors[rule_index].selectorArr[selector_index].classes = append(selectors[rule_index].selectorArr[selector_index].classes, class)
-				for _, e := range scopedElements {
-					for _, c := range e.classes {
-						//if c == class && !strings.Contains(style, class+".plenti-") && !strings.HasPrefix(class, "plenti-") {
-						if c == class && !strings.HasPrefix(class, "plenti-") {
-							//style = strings.ReplaceAll(style, class, class+"."+e.scopedClass)
-							selectors[rule_index].selectorArr[selector_index].classes = append(selectors[rule_index].selectorArr[selector_index].classes, class+"."+e.scopedClass)
-							continue
-						}
-					}
-				}
-			}
-			if token.Type.String() == "HASH" {
-				// Found CSS ID
-				id := strings.TrimPrefix(token.Value, "#")
-				for _, e := range scopedElements {
-					//if e.id == id && !strings.Contains(style, id+".plenti-") {
-					if e.id == id {
-						//style = strings.ReplaceAll(style, id, id+"."+e.scopedClass)
-						selectors[rule_index].selectorArr[selector_index].id = id + "." + e.scopedClass
-						continue
-					}
-				}
-				//selectors[rule_index].selectorArr[selector_index].id = id
-			}
-		}
-	}
-
-	// The `selectors` var isn't currently used, but could be useful for removing unused styles
-	//fmt.Println(selectors)
-	//fmt.Println("============")
-	// or only setting classes in HTML if the selector exists in CSS
-	return style, selectors
-}
-*/
-
 type visitor struct {
 	scopedElements []scopedElement
 }
@@ -605,7 +411,12 @@ func generateRandom() (string, error) {
 	return string(bytes), nil
 }
 
-func templateParts(template string) (string, string, string, string) {
+func templateParts(path string) (string, string, string, string) {
+	c, err := os.ReadFile(path)
+	if err != nil {
+		log.Fatal(err)
+	}
+	template := string(c)
 	reFence := regexp.MustCompile(`(?s)---(.*?)---`)
 	reScript := regexp.MustCompile(`(?s)<script>(.*?)</script>`)
 	reStyle := regexp.MustCompile(`(?s)<style>(.*?)</style>`)
@@ -1058,22 +869,17 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 			markup, script, style, newScopeStack, fence_logic := RecursiveRender(compPath, newProps, scopeStack)
 			// Create scoped classes and add to html
 			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
-			//styleTree := buildStyleTree(style)
 			// Add scoped classes to css
-			//style, _ = scopeCSS(style, scopedElements)
-			//newStyleTree = scopeCSS(newStyleTree, scopedElements)
 			newScopeStack = append(newScopeStack, scopeStackItem{
 				scopedElements: scopedElements,
 				style:          style,
 				script:         script,
 			})
-			scopeStack = append(scopeStack, newScopeStack...)
+			scopeStack = newScopeStack
 			// Add scoped classes to js
 			script = scopeJS(script, scopedElements)
 			markupBuilder.WriteString(markup)
 			scriptBuilder.WriteString(script)
-			//styleBuilder.WriteString(style)
-			//styleTree = append(styleTree, newStyleTree...)
 		} else if ctrl.isDynamicComp {
 			newProps := make(map[string]any)
 			for prop_name, prop_value := range ctrl.dynamicCompProps {
@@ -1085,25 +891,18 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 			// Create scoped classes and add to html
 			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
 			// Add scoped classes to css
-			//style, _ = scopeCSS(style, scopedElements)
-			//styleTree := buildStyleTree(style)
-			//newStyleTree = scopeCSS(newStyleTree, scopedElements)
-			//styleTree = append(styleTree, newStyleTree...)
-			// Add scoped classes to js
 			newScopeStack = append(newScopeStack, scopeStackItem{
 				scopedElements: scopedElements,
 				style:          style,
 				script:         script,
 			})
-			scopeStack = append(scopeStack, newScopeStack...)
+			scopeStack = newScopeStack
 			script = scopeJS(script, scopedElements)
 			markupBuilder.WriteString(markup)
 			scriptBuilder.WriteString(script)
-			//styleBuilder.WriteString(style)
 		}
 	}
 
-	//return markupBuilder.String(), scriptBuilder.String(), styleBuilder.String()
 	return markupBuilder.String(), scriptBuilder.String(), scopeStack
 }
 
