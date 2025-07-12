@@ -68,29 +68,28 @@ func Render(path string, props map[string]any) (string, string, string, string) 
 }
 
 func evalScopeStack(scopeStack []scopeStackItem) (string, string) {
-	//var styleBuilder strings.Builder
-	//var scriptBuilder strings.Builder
-	style := ""
-	script := ""
+	var styleBuilder strings.Builder
+	var scriptBuilder strings.Builder
 
 	for _, stackItem := range scopeStack {
 		if stackItem.script != "" {
 			// Add scoped classes to js
-			script += scopeJS(stackItem.script, stackItem.scopedElements)
+			scopedScript := scopeJS(stackItem.script, stackItem.scopedElements)
+			scriptBuilder.WriteString(scopedScript)
 		}
 		// Process style with CSS parser
 		if stackItem.style != "" {
 			// Add scoped classes to CSS
-			style += scopeCSS(stackItem.style, stackItem.scopedElements)
+			scopedStyle := scopeCSS(stackItem.style, stackItem.scopedElements)
+			styleBuilder.WriteString(scopedStyle)
 		}
 	}
 
-	//return styleBuilder.String(), scriptBuilder.String()
-	return style, script
+	return styleBuilder.String(), scriptBuilder.String()
 }
 
 func scopeCSS(style string, scopedElements []scopedElement) string {
-	out := ""
+	var out strings.Builder
 
 	// Create new CSS Parser
 	p := css.NewParser(parse.NewInputString(style), false)
@@ -98,57 +97,54 @@ func scopeCSS(style string, scopedElements []scopedElement) string {
 		gt, _, data := p.Next()
 		if gt == css.ErrorGrammar {
 			break
-		}
-		if gt == css.ErrorGrammar {
-			break
 		} else if gt == css.AtRuleGrammar || gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar || gt == css.DeclarationGrammar {
-			out += string(data)
+			out.Write(data)
 			if gt == css.DeclarationGrammar {
-				out += ":"
+				out.WriteString(":")
 			}
 			for i, val := range p.Values() {
 				if val.TokenType == css.HashToken {
 					// CSS ID
 					scopedClass := getScopedClass(string(val.Data), "id", scopedElements)
 					if scopedClass != "" {
-						out += string(val.Data) + "." + scopedClass
+						out.WriteString(string(val.Data) + "." + scopedClass)
 					} else {
-						out += string(val.Data)
+						out.Write(val.Data)
 					}
 				} else if val.TokenType == css.IdentToken {
 					if i > 0 && p.Values()[i-1].TokenType == css.DelimToken {
 						// CSS Class
 						scopedClass := getScopedClass(string(val.Data), "class", scopedElements)
 						if scopedClass != "" {
-							out += string(val.Data) + "." + scopedClass
+							out.WriteString(string(val.Data) + "." + scopedClass)
 						} else {
-							out += string(val.Data)
+							out.Write(val.Data)
 						}
 					} else {
 						scopedClass := getScopedClass(string(val.Data), "tag", scopedElements)
 						// TODO: This not only captures tags / elements, but styles (e.g. red, bold, 2rem) too
 						// The styles shouldn't return a scopedClass, but we should filter these intentionally
 						if scopedClass != "" {
-							out += string(val.Data) + "." + scopedClass
+							out.WriteString(string(val.Data) + "." + scopedClass)
 						} else {
-							out += string(val.Data)
+							out.Write(val.Data)
 						}
 					}
 				} else {
-					out += string(val.Data)
+					out.Write(val.Data)
 				}
 			}
 			if gt == css.BeginAtRuleGrammar || gt == css.BeginRulesetGrammar {
-				out += "{"
+				out.WriteString("{")
 			} else if gt == css.AtRuleGrammar || gt == css.DeclarationGrammar {
-				out += ";"
+				out.WriteString(";")
 			}
 		} else {
-			out += string(data)
+			out.Write(data)
 		}
 	}
 
-	return out
+	return out.String()
 }
 
 func formatJS(script string) string {
