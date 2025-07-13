@@ -813,7 +813,10 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
-			markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
+			// TODO: Need to evalBrackets for proper SSR, but need to set
+			// an x-text attribute (currently happening on line 244 in traverse)
+			//markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
+			markupBuilder.WriteString(ctrl.textContent)
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
 				markup, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, props, components)
@@ -872,7 +875,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 			}
 			markup, script, style, newScopeStack, fence_logic := RecursiveRender(compPath, newProps, scopeStack)
 			// Create scoped classes and add to html
-			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
+			markup, scopedElements := scopeHTMLComp(markup, ctrl.compProps, fence_logic)
 			// Add scoped classes to css
 			newScopeStack = append(newScopeStack, scopeStackItem{
 				scopedElements: scopedElements,
@@ -890,7 +893,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 			evaluatedCompPath := evalAllBrackets(ctrl.dynamicCompPath, props)
 			markup, script, style, newScopeStack, fence_logic := RecursiveRender(evaluatedCompPath, newProps, scopeStack)
 			// Create scoped classes and add to html
-			markup, scopedElements := scopeHTMLComp(markup, props, fence_logic)
+			markup, scopedElements := scopeHTMLComp(markup, ctrl.compProps, fence_logic)
 			// Add scoped classes to css
 			newScopeStack = append(newScopeStack, scopeStackItem{
 				scopedElements: scopedElements,
@@ -1028,8 +1031,8 @@ func makeGetter(comp_data map[string]any, fence_logic string) (string, string) {
 	for k, v := range comp_data {
 		params = append(params, k)
 
-		//value_str := fmt.Sprintf("%v", v) // Any to string
-		value_str := anyToString(v)
+		value_str := fmt.Sprintf("%v", v) // Any to string
+		//value_str := anyToString(v)
 		value_str = makeAttrStr(value_str)
 
 		for prop_name, _ := range comp_data {
