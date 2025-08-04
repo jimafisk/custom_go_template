@@ -239,16 +239,20 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 				node.Attr = append(node.Attr, attr)
 			}
 		}
-		if node.Type == html.TextNode {
-			if strings.Contains(node.Data, "{") && strings.Contains(node.Data, "}") {
-				attr := html.Attribute{
-					Key: "x-text",
-					Val: "`" + strings.ReplaceAll(strings.ReplaceAll(node.Data, "{", "${"), "\"", "'") + "`",
+		/*
+		 */
+		/*
+			if node.Type == html.TextNode {
+				if strings.Contains(node.Data, "{") && strings.Contains(node.Data, "}") {
+					attr := html.Attribute{
+						Key: "x-text",
+						Val: "`" + strings.ReplaceAll(strings.ReplaceAll(node.Data, "{", "${"), "\"", "'") + "`",
+					}
+					node.Parent.Attr = append(node.Parent.Attr, attr)
 				}
-				node.Parent.Attr = append(node.Parent.Attr, attr)
+				node.Data = evalAllBrackets(node.Data, props)
 			}
-			node.Data = evalAllBrackets(node.Data, props)
-		}
+		*/
 		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
 			tag := node.Data
 			id := ""
@@ -796,217 +800,6 @@ type scopeStackItem struct {
 	script         string
 }
 
-/*
-// ProcessHTMLFragment adds x-text attributes to HTML elements containing {variable} patterns
-func ProcessHTMLFragment(htmlStr string, props map[string]any) (string, error) {
-	nodes, _ := html.ParseFragment(strings.NewReader(htmlStr), &html.Node{
-		Type:     html.ElementNode,
-		Data:     "body",
-		DataAtom: atom.Body,
-	})
-	// Render the modified HTML
-	var buf bytes.Buffer
-	for _, node := range nodes {
-		ftraverse(node, props)
-
-		if err := html.Render(&buf, node); err != nil {
-			return "", fmt.Errorf("failed to render HTML: %v", err)
-		}
-	}
-
-
-		// Parse the HTML
-		//doc, err := html.Parse(strings.NewReader(htmlStr))
-		//if err != nil {
-		//	return "", fmt.Errorf("failed to parse HTML: %v", err)
-		//}
-
-		// Traverse the DOM and modify nodes
-		//ftraverse(doc, props)
-
-		// Render the modified HTML
-		//var buf bytes.Buffer
-		//if err := html.Render(&buf, doc); err != nil {
-		//	return "", fmt.Errorf("failed to render HTML: %v", err)
-		//}
-
-	return buf.String(), nil
-}
-
-// traverse recursively processes HTML nodes
-func ftraverse(n *html.Node, props map[string]any) {
-	// Process text nodes
-	if n.Type == html.TextNode && n.Parent != nil {
-		// Check if text contains curly braces
-		if strings.Contains(n.Data, "{") && strings.Contains(n.Data, "}") {
-			// Escape backticks and dollar signs for template literal
-			escapedContent := strings.ReplaceAll(n.Data, "`", "\\`")
-			escapedContent = strings.ReplaceAll(escapedContent, "$", "\\$")
-			escapedContent = strings.ReplaceAll(escapedContent, "\n", "")
-			xTextContent := "`" + strings.TrimSpace(escapedContent) + "`"
-
-			// Add x-text attribute to parent element
-			addXTextAttribute(n.Parent, xTextContent)
-
-			// Evaluate the text content using evalAllBrackets
-			evaluatedContent := evalAllBrackets(n.Data, props)
-			// Update the text node's content with evaluated result
-			n.Data = evaluatedContent
-		}
-	}
-
-	// Recursively process child nodes
-	for c := n.FirstChild; c != nil; c = c.NextSibling {
-		ftraverse(c, props)
-	}
-}
-
-// addXTextAttribute adds or updates the x-text attribute on a node
-func addXTextAttribute(n *html.Node, value string) {
-	// Check if x-text attribute already exists
-	for i, attr := range n.Attr {
-		if attr.Key == "x-text" {
-			n.Attr[i].Val = value
-			return
-		}
-	}
-
-	// Add new x-text attribute
-	n.Attr = append(n.Attr, html.Attribute{
-		Key: "x-text",
-		Val: value,
-	})
-}
-
-// ProcessHTMLFragment adds x-text attributes to HTML elements containing {variable} patterns
-func ProcessHTMLFragment(htmlStr string, props map[string]any) (string, error) {
-	// Initialize lexer
-	input := parse.NewInputString(htmlStr)
-	lexer := phtml.NewLexer(input)
-
-	// Buffer to store output
-	var output bytes.Buffer
-
-	// Stack to track parent tags
-	var tagStack []string
-	var currentTagStart bytes.Buffer // Buffer to store the current tag's start token
-	var lastTextNode string          // Store the last text node for processing
-
-	for {
-		tokenType, data := lexer.Next()
-		switch tokenType {
-		case phtml.ErrorToken:
-			if lexer.Err() != nil && lexer.Err().Error() != "EOF" {
-				return "", fmt.Errorf("failed to parse HTML: %v", lexer.Err())
-			}
-			// Write any remaining text node
-			if lastTextNode != "" {
-				output.WriteString(lastTextNode)
-			}
-			return output.String(), nil
-
-		case phtml.TextToken:
-			// Store the text node
-			if lastTextNode != "" {
-				// Write the previous text node if it exists
-				output.WriteString(lastTextNode)
-			}
-			lastTextNode = string(data)
-
-			// Check if text contains {variable} pattern
-			if strings.Contains(lastTextNode, "{") && strings.Contains(lastTextNode, "}") {
-				// Escape backticks and dollar signs for template literal
-				escapedContent := strings.ReplaceAll(lastTextNode, "`", "\\`")
-				escapedContent = strings.ReplaceAll(escapedContent, "$", "\\$")
-				escapedContent = strings.ReplaceAll(escapedContent, "\n", "")
-				xTextContent := "`" + strings.TrimSpace(escapedContent) + "`"
-
-				// Evaluate the text content
-				evaluatedContent := evalAllBrackets(lastTextNode, props)
-				lastTextNode = evaluatedContent // Update text node with evaluated content
-
-				// If we have a parent tag, modify its start tag to include x-text
-				if len(tagStack) > 0 && currentTagStart.Len() > 0 {
-					// Reconstruct the parent tag with x-text attribute
-					tagStr := currentTagStart.String()
-					if !strings.Contains(tagStr, `x-text=`) {
-						// Insert x-text attribute before the closing >
-						if strings.HasSuffix(tagStr, ">") {
-							tagStr = tagStr[:len(tagStr)-1] + fmt.Sprintf(` x-text="%s">`, xTextContent)
-						} else if strings.HasSuffix(tagStr, "/>") {
-							tagStr = tagStr[:len(tagStr)-2] + fmt.Sprintf(` x-text="%s"/>`, xTextContent)
-						}
-						// Write the modified tag
-						output.WriteString(tagStr)
-						currentTagStart.Reset() // Clear the buffer
-					}
-				}
-			}
-
-		case phtml.StartTagToken:
-			// Write any pending text node
-			if lastTextNode != "" {
-				output.WriteString(lastTextNode)
-				lastTextNode = ""
-			}
-
-			// Store the start tag
-			currentTagStart.Reset()
-			currentTagStart.Write(data)
-
-			// Extract tag name
-			tagName := extractTagName(data)
-			if tagName != "" {
-				// Only push to stack if not a self-closing tag
-				if !strings.HasSuffix(string(data), "/>") {
-					tagStack = append(tagStack, tagName)
-				} else {
-					// For self-closing tags, write immediately
-					output.WriteString(currentTagStart.String())
-					currentTagStart.Reset()
-				}
-			}
-
-		case phtml.EndTagToken:
-			// Write any pending text node
-			if lastTextNode != "" {
-				output.WriteString(lastTextNode)
-				lastTextNode = ""
-			}
-
-			// Pop the tag stack
-			if len(tagStack) > 0 {
-				tagStack = tagStack[:len(tagStack)-1]
-			}
-			output.Write(data)
-			currentTagStart.Reset() // Clear the current tag buffer
-
-		default:
-			// Write any pending text node
-			if lastTextNode != "" {
-				output.WriteString(lastTextNode)
-				lastTextNode = ""
-			}
-			output.Write(data)
-		}
-	}
-}
-
-// extractTagName extracts the tag name from a start tag token's data
-func extractTagName(data []byte) string {
-	// Convert to string and remove the leading '<'
-	tagStr := strings.TrimPrefix(string(data), "<")
-	// Find the first space or end of tag
-	end := len(tagStr)
-	if idx := strings.IndexAny(tagStr, " >"); idx != -1 {
-		end = idx
-	}
-	// Return the tag name (lowercase for consistency)
-	return strings.ToLower(tagStr[:end])
-}
-
-*/
-
 // ProcessHTMLFragment adds x-text attributes to HTML elements containing {variable} patterns
 func ProcessHTMLFragment(htmlStr string, props map[string]any) (string, error) {
 	// Regex to match an opening tag followed by text content (until a closing tag, another opening tag, or end)
@@ -1060,20 +853,11 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
-			// TODO: Need to evalBrackets for proper SSR, but need to set
-			// an x-text attribute (currently happening on line 244 in traverse)
-			//markupBuilder.WriteString(evalAllBrackets(ctrl.textContent, props))
-			//fmt.Println(ctrl.textContent)
 			str, err := ProcessHTMLFragment(ctrl.textContent, props)
 			if err != nil {
 				fmt.Println(err)
 			}
-			fmt.Println(str)
-			fmt.Println("=================")
-			/*
-			 */
 			markupBuilder.WriteString(str)
-			//markupBuilder.WriteString(ctrl.textContent)
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
 				markup, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, props, components)
