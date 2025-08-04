@@ -47,7 +47,7 @@ func RecursiveRender(path string, props map[string]any, scopeStack []scopeStackI
 	if err != nil {
 		fmt.Println(err)
 	}
-	markup, scopeStack = evalControlTree(controlTree, script, scopeStack, props, components)
+	markup, scopeStack = evalControlTree(controlTree, scopeStack, props, components)
 
 	return markup, script, style, scopeStack, fence_logic
 }
@@ -848,7 +848,7 @@ func ProcessHTMLFragment(htmlStr string, props map[string]any) (string, error) {
 	return output, nil
 }
 
-func evalControlTree(controlTree []control, script string, scopeStack []scopeStackItem, props map[string]any, components []Component) (string, []scopeStackItem) {
+func evalControlTree(controlTree []control, scopeStack []scopeStackItem, props map[string]any, components []Component) (string, []scopeStackItem) {
 	var markupBuilder strings.Builder
 
 	for _, ctrl := range controlTree {
@@ -860,7 +860,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 			markupBuilder.WriteString(str)
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
-				markup, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, props, components)
+				markup, newScopeStack := evalControlTree(ctrl.children, scopeStack, props, components)
 				markupBuilder.WriteString(markup)
 				scopeStack = newScopeStack
 			} else {
@@ -868,7 +868,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 				// Process else-if statements
 				for _, child := range ctrl.children {
 					if child.isElseIfStmt && isBoolAndTrue(evalJS(child.elseIfCondition, props)) {
-						markup, newScopeStack := evalControlTree(child.children, script, scopeStack, props, components)
+						markup, newScopeStack := evalControlTree(child.children, scopeStack, props, components)
 						markupBuilder.WriteString(markup)
 						scopeStack = newScopeStack
 						evaluated = true
@@ -879,7 +879,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 				if !evaluated {
 					for _, child := range ctrl.children {
 						if child.isElseStmt {
-							markup, newScopeStack := evalControlTree(child.children, script, scopeStack, props, components)
+							markup, newScopeStack := evalControlTree(child.children, scopeStack, props, components)
 							markupBuilder.WriteString(markup)
 							scopeStack = newScopeStack
 							break
@@ -897,7 +897,7 @@ func evalControlTree(controlTree []control, script string, scopeStack []scopeSta
 						newProps[k] = v
 					}
 					newProps[ctrl.forVar] = item
-					markup, newScopeStack := evalControlTree(ctrl.children, script, scopeStack, newProps, components)
+					markup, newScopeStack := evalControlTree(ctrl.children, scopeStack, newProps, components)
 					markupBuilder.WriteString(markup)
 					scopeStack = newScopeStack
 				}
