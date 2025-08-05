@@ -179,7 +179,7 @@ func scopeHTML(markup string, props map[string]any) (string, []scopedElement) {
 	return markup, scopedElements
 }
 
-func scopeHTMLComp(comp_markup string, comp_props map[string]any, fence_logic string) (string, []scopedElement) {
+func scopeHTMLComp(comp_markup string, evaled_props map[string]any, comp_props map[string]any, fence_logic string) (string, []scopedElement) {
 	// We scope components differently than the full document
 	// because html.Parse() builds a full document tree, aka wraps the component in <html><body></body></html>.
 	// This shakes out when getting applied to the existing document tree, but we've scope styles for the html and body elements
@@ -196,7 +196,7 @@ func scopeHTMLComp(comp_markup string, comp_props map[string]any, fence_logic st
 		DataAtom: atom.Body,
 	})
 	for _, node := range nodes {
-		node, scopedElements = traverse(node, scopedElements, comp_props)
+		node, scopedElements = traverse(node, scopedElements, evaled_props)
 
 		if len(comp_props) > 0 {
 			x_data_str, x_init_str := makeGetter(comp_props, fence_logic)
@@ -239,20 +239,16 @@ func traverse(node *html.Node, scopedElements []scopedElement, props map[string]
 				node.Attr = append(node.Attr, attr)
 			}
 		}
-		/*
-		 */
-		/*
-			if node.Type == html.TextNode {
-				if strings.Contains(node.Data, "{") && strings.Contains(node.Data, "}") {
-					attr := html.Attribute{
-						Key: "x-text",
-						Val: "`" + strings.ReplaceAll(strings.ReplaceAll(node.Data, "{", "${"), "\"", "'") + "`",
-					}
-					node.Parent.Attr = append(node.Parent.Attr, attr)
+		if node.Type == html.TextNode {
+			if strings.Contains(node.Data, "{") && strings.Contains(node.Data, "}") {
+				attr := html.Attribute{
+					Key: "x-text",
+					Val: "`" + strings.ReplaceAll(strings.ReplaceAll(node.Data, "{", "${"), "\"", "'") + "`",
 				}
-				node.Data = evalAllBrackets(node.Data, props)
+				node.Parent.Attr = append(node.Parent.Attr, attr)
 			}
-		*/
+			node.Data = evalAllBrackets(node.Data, props)
+		}
 		if node.Type == html.ElementNode && node.DataAtom.String() != "" {
 			tag := node.Data
 			id := ""
@@ -800,64 +796,12 @@ type scopeStackItem struct {
 	script         string
 }
 
-// ProcessHTMLFragment adds x-text attributes to HTML elements containing {variable} patterns
-func ProcessHTMLFragment(htmlStr string, props map[string]any) (string, error) {
-	// Regex to match an opening tag followed by text content (until a closing tag, another opening tag, or end)
-	// Captures: 1) opening tag, 2) text content
-	re := regexp.MustCompile(`(?i)(<[a-z][a-z0-9]*(?:\s+[^>]*)?>)([^<>{]*(?:\{[^}]*\}[^<>{]*)*)`)
-
-	// Replace matches, adding x-text attribute and evaluating text
-	output := re.ReplaceAllStringFunc(htmlStr, func(match string) string {
-		// Extract the opening tag and text content
-		matches := re.FindStringSubmatch(match)
-		if len(matches) != 3 {
-			return match // Shouldn't happen, but return unchanged if no match
-		}
-		openingTag := matches[1]
-		textContent := matches[2]
-
-		// Check if text contains curly braces
-		if !strings.Contains(textContent, "{") || !strings.Contains(textContent, "}") {
-			return match // No curly braces, return unchanged
-		}
-
-		// Escape backticks and dollar signs for template literal
-		escapedContent := strings.ReplaceAll(textContent, "`", "\\`")
-		escapedContent = strings.ReplaceAll(escapedContent, "$", "\\$")
-		escapedContent = strings.ReplaceAll(escapedContent, "{", "${")
-		escapedContent = strings.ReplaceAll(escapedContent, "\n", "")
-		xTextContent := "`" + strings.TrimSpace(escapedContent) + "`"
-
-		// Evaluate the text content
-		evaluatedContent := evalAllBrackets(textContent, props)
-
-		// Check if x-text attribute already exists
-		if strings.Contains(openingTag, `x-text=`) {
-			// If x-text exists, update it (replace the old value)
-			reAttr := regexp.MustCompile(`x-text="[^"]*"`)
-			openingTag = reAttr.ReplaceAllString(openingTag, fmt.Sprintf(`x-text="%s"`, xTextContent))
-		} else {
-			// Add x-text attribute before the closing >
-			openingTag = openingTag[:len(openingTag)-1] + fmt.Sprintf(` x-text="%s">`, xTextContent)
-		}
-
-		// Return the modified tag and evaluated text
-		return openingTag + evaluatedContent
-	})
-
-	return output, nil
-}
-
 func evalControlTree(controlTree []control, scopeStack []scopeStackItem, props map[string]any, components []Component) (string, []scopeStackItem) {
 	var markupBuilder strings.Builder
 
 	for _, ctrl := range controlTree {
 		if ctrl.isTextNode {
-			str, err := ProcessHTMLFragment(ctrl.textContent, props)
-			if err != nil {
-				fmt.Println(err)
-			}
-			markupBuilder.WriteString(str)
+			markupBuilder.WriteString(ctrl.textContent)
 		} else if ctrl.isIfStmt {
 			if isBoolAndTrue(evalJS(ctrl.ifCondition, props)) {
 				markup, newScopeStack := evalControlTree(ctrl.children, scopeStack, props, components)
@@ -916,7 +860,7 @@ func evalControlTree(controlTree []control, scopeStack []scopeStackItem, props m
 			}
 			markup, script, style, newScopeStack, fence_logic := RecursiveRender(compPath, newProps, scopeStack)
 			// Create scoped classes and add to html
-			markup, scopedElements := scopeHTMLComp(markup, ctrl.compProps, fence_logic)
+			markup, scopedElements := scopeHTMLComp(markup, newProps, ctrl.compProps, fence_logic)
 			// Add scoped classes to css
 			newScopeStack = append(newScopeStack, scopeStackItem{
 				scopedElements: scopedElements,
@@ -934,7 +878,7 @@ func evalControlTree(controlTree []control, scopeStack []scopeStackItem, props m
 			evaluatedCompPath := evalAllBrackets(ctrl.dynamicCompPath, props)
 			markup, script, style, newScopeStack, fence_logic := RecursiveRender(evaluatedCompPath, newProps, scopeStack)
 			// Create scoped classes and add to html
-			markup, scopedElements := scopeHTMLComp(markup, ctrl.compProps, fence_logic)
+			markup, scopedElements := scopeHTMLComp(markup, newProps, ctrl.compProps, fence_logic)
 			// Add scoped classes to css
 			newScopeStack = append(newScopeStack, scopeStackItem{
 				scopedElements: scopedElements,
@@ -1131,7 +1075,7 @@ func copyFile(sourcePath, destPath string) {
 
 func main() {
 	// Render the template with data
-	props := map[string]any{"name": "J", "age": 2, "animals": []string{"cat", "dog", "pig"}}
+	props := map[string]any{"name": "Ja", "age": 2, "animals": []string{"cat", "dog", "pig"}}
 	markup, script, style, _ := Render("views/home.html", props)
 	os.MkdirAll("./public", os.ModePerm)
 	os.WriteFile("./public/script.js", []byte(script), fs.ModePerm)
