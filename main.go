@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"fmt"
 	"io"
@@ -796,6 +797,62 @@ type scopeStackItem struct {
 	script         string
 }
 
+// addXDataAttribute adds x-data="" to all top-level HTML elements
+// func addXDataAttribute(htmlStr string, newProps map[string]any) (string, error) {
+func addXDataAttribute(htmlStr string, dataStr string) (string, error) {
+	// Parse the HTML string
+	doc, err := html.Parse(strings.NewReader(htmlStr))
+	if err != nil {
+		return "", fmt.Errorf("failed to parse HTML: %w", err)
+	}
+
+	// Find the body node (html.Parse wraps fragments in <html><body>)
+	var body *html.Node
+	var findBody func(*html.Node)
+	findBody = func(n *html.Node) {
+		if n.Type == html.ElementNode && n.Data == "body" {
+			body = n
+			return
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			findBody(c)
+		}
+	}
+	findBody(doc)
+
+	if body == nil {
+		return "", fmt.Errorf("no body node found")
+	}
+
+	// Add x-data="" to all top-level elements in the body
+	for c := body.FirstChild; c != nil; c = c.NextSibling {
+		if c.Type == html.ElementNode {
+			// Check if x-data attribute already exists
+			hasXData := false
+			for _, attr := range c.Attr {
+				if attr.Key == "x-data" {
+					hasXData = true
+					break
+				}
+			}
+			// Add x-data="" if not present
+			if !hasXData {
+				c.Attr = append(c.Attr, html.Attribute{Key: "x-data", Val: dataStr})
+			}
+		}
+	}
+
+	// Render the modified HTML
+	var buf bytes.Buffer
+	for c := body.FirstChild; c != nil; c = c.NextSibling {
+		if err := html.Render(&buf, c); err != nil {
+			return "", fmt.Errorf("failed to render HTML: %w", err)
+		}
+	}
+
+	return buf.String(), nil
+}
+
 func evalControlTree(controlTree []control, scopeStack []scopeStackItem, props map[string]any, components []Component) (string, []scopeStackItem) {
 	var markupBuilder strings.Builder
 
@@ -842,6 +899,9 @@ func evalControlTree(controlTree []control, scopeStack []scopeStackItem, props m
 					}
 					newProps[ctrl.forVar] = item
 					markup, newScopeStack := evalControlTree(ctrl.children, scopeStack, newProps, components)
+					//markup, _ = addXDataAttribute(markup, newProps)
+					dataStr := "{" + ctrl.forVar + ": " + makeAttrStr(anyToString(item)) + "}"
+					markup, _ = addXDataAttribute(markup, dataStr)
 					markupBuilder.WriteString(markup)
 					scopeStack = newScopeStack
 				}
